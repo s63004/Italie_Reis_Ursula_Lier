@@ -12,9 +12,10 @@ class App {
         this.roommateSearchQuery = {};
         this.selectedRoommates = {};
 
-        // TIMER STATE — eenmalig gezet, NOOIT overschreven door re-renders
+        // TIMER STATE
         this._lockStartServerMs = null;
         this._timerActive = false;
+        this._localStartTime = null; // NIEUW: Houdt lokaal de starttijd bij voor een stabiele klok
 
         this.init();
     }
@@ -50,24 +51,26 @@ class App {
         }, 1000);
     }
 
-    // ─── TIMER LOGICA (robuust, niet-onderbreekbaar) ───
+    // ─── TIMER LOGICA (robuust, lokaal) ───
 
     _startTimer(serverTimestamp) {
         if (this._timerActive) return; 
         this._lockStartServerMs = serverTimestamp;
+        this._localStartTime = Date.now(); // Start de klok op DIT moment op DIT apparaat
         this._timerActive = true;
-        console.log('⏱️ Timer gestart, server_ts:', serverTimestamp);
+        console.log('⏱️ Lokale timer gestart');
     }
 
     _stopTimer() {
         this._lockStartServerMs = null;
+        this._localStartTime = null;
         this._timerActive = false;
     }
 
     _getRemaining() {
-        if (!this._lockStartServerMs) return -1;
-        const serverNow = window.dbApi.getEstimatedServerTime();
-        const elapsed = Math.floor((serverNow - this._lockStartServerMs) / 1000);
+        if (!this._timerActive || !this._localStartTime) return -1;
+        // Simpelweg: huidige tijd - starttijd = verlopen tijd.
+        const elapsed = Math.floor((Date.now() - this._localStartTime) / 1000);
         return Math.max(0, 60 - elapsed);
     }
 
@@ -85,7 +88,7 @@ class App {
             }
         }
 
-        // Auto-annuleer bij 0
+        // Auto-annuleer bij 0 (op het scherm, database heeft nu 90 seconden marge)
         if (remaining <= 0) {
             console.log('⏱️ Timer verlopen, auto-annuleer');
             this._stopTimer();
@@ -118,7 +121,7 @@ class App {
     // ─── MAIN RENDER ───
 
     async render(force = false) {
-        // OPLOSSING: Controleer of de gebruiker aan het typen is
+        // Controleer of de gebruiker aan het typen is
         const isTyping = document.activeElement && document.activeElement.tagName === 'INPUT';
         
         // Als de gebruiker typt, en het is geen verplichte (force) update, stop dan met renderen!
@@ -156,7 +159,7 @@ class App {
             this.selectedRoommates = {};
         }
 
-        // We bewaren de focus voor de zekerheid (bijv. als er wél een 'force' was)
+        // We bewaren de focus voor de zekerheid
         const activeElementId = document.activeElement ? document.activeElement.id : null;
 
         container.innerHTML = '';
@@ -313,6 +316,7 @@ class App {
             container.appendChild(card);
         });
 
+        // Herstel de focus als we klaar zijn met tekenen
         if (activeElementId) {
             const el = document.getElementById(activeElementId);
             if (el) {
@@ -402,7 +406,13 @@ class App {
 
             const nextHotelId = this.currentHotelId === 1 ? 2 : 1;
             this.setHotel(nextHotelId);
-            this.showAlert("Opgeslagen! Controleer je kamers.", "success");
+            
+            // Controleer of er iemand net op het nippertje "gekaapt" werd door een andere leerling
+            if (res.message && res.message.includes('veilig!')) {
+                this.showAlert(res.message, "error"); // Oranje/Rode alert om te waarschuwen
+            } else {
+                this.showAlert("Opgeslagen! Controleer je kamers.", "success");
+            }
         } else {
             this.showAlert(res.message, "error");
             this.render(true);
