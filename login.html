@@ -29,7 +29,6 @@
             <p class="text-white/90 text-lg">Italiëreis Kamerverdeling</p>
         </div>
 
-        <!-- Smartschool Login Knop -->
         <div class="mt-8">
             <a href="loginSS.php?aanmelden=1" class="flex items-center justify-center w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition transform hover:-translate-y-0.5">
                 <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path></svg>
@@ -37,12 +36,93 @@
             </a>
             <p class="text-sm text-white/70 text-center mt-4">Je wordt doorgestuurd naar de veilige Smartschool login omgeving.</p>
         </div>
+
+        <div class="mt-6 border-t border-white/20 pt-4">
+            <button onclick="document.getElementById('devForm').classList.toggle('hidden')" class="w-full text-center text-xs text-white/50 hover:text-white underline transition focus:outline-none">
+                Gebruik handmatige test-login (Dev Mode)
+            </button>
+            
+            <div id="devForm" class="hidden mt-4 bg-white/10 p-4 rounded-xl border border-white/20 space-y-3 shadow-inner">
+                <input type="text" id="dev_vnaam" placeholder="Voornaam (bijv. Lukas)" class="w-full p-2 rounded-lg bg-white/90 text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                <input type="text" id="dev_naam" placeholder="Achternaam (bijv. Peeters)" class="w-full p-2 rounded-lg bg-white/90 text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                
+                <select id="dev_geslacht" class="w-full p-2 rounded-lg bg-white/90 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                    <option value="M">Jongen (M)</option>
+                    <option value="V">Meisje (V)</option>
+                </select>
+
+                <div class="flex items-center gap-2 text-white text-sm">
+                    <input type="checkbox" id="dev_isLeerkracht" class="rounded text-orange-500 focus:ring-orange-500 cursor-pointer" onchange="document.getElementById('dev_pw_container').classList.toggle('hidden')">
+                    <label for="dev_isLeerkracht" class="cursor-pointer">Ik ben leerkracht</label>
+                </div>
+
+                <div id="dev_pw_container" class="hidden">
+                    <input type="password" id="dev_pw" placeholder="Wachtwoord (bijv. UrsulaItalie2026)" class="w-full p-2 rounded-lg bg-white/90 text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                </div>
+
+                <div id="dev_error" class="hidden text-red-200 text-xs font-medium bg-red-900/60 p-2 rounded border border-red-500/50"></div>
+
+                <button onclick="devLogin()" class="w-full bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2.5 rounded-lg shadow transition text-sm">
+                    Inloggen zonder Smartschool
+                </button>
+            </div>
+        </div>
     </div>
 
-    <!-- Referentie naar het Database API script (mocht er iets pre-geladen moeten worden) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/config.js"></script>
     <script src="js/data.js"></script>
 
+    <script>
+        async function devLogin() {
+            const vnaam = document.getElementById('dev_vnaam').value.trim();
+            const naam = document.getElementById('dev_naam').value.trim();
+            const geslacht = document.getElementById('dev_geslacht').value;
+            const isLeerkracht = document.getElementById('dev_isLeerkracht').checked;
+            const errorBox = document.getElementById('dev_error');
+
+            errorBox.classList.add('hidden');
+
+            if (!vnaam || !naam) {
+                errorBox.innerText = "Vul a.u.b. een voornaam en achternaam in.";
+                errorBox.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                if (isLeerkracht) {
+                    const pw = document.getElementById('dev_pw').value;
+                    const isValid = await window.dbApi.verifyTeacherPassword(pw);
+                    if (!isValid) {
+                        errorBox.innerText = "Fout leerkracht-wachtwoord.";
+                        errorBox.classList.remove('hidden');
+                        return;
+                    }
+                    // Leerkracht dev login
+                    await window.dbApi.login(naam, vnaam, geslacht, true, "dev_lk_" + Date.now());
+                    window.location.href = 'admin.html';
+                } else {
+                    // Zoek leerling in database (analoog aan loginSS.php)
+                    const alleLeerlingen = await window.dbApi.getAllLeerlingen();
+                    const match = alleLeerlingen.find(l => 
+                        l.vnaam.toLowerCase() === vnaam.toLowerCase() && 
+                        l.naam.toLowerCase() === naam.toLowerCase()
+                    );
+
+                    if (match) {
+                        await window.dbApi.login(naam, vnaam, geslacht, false, match.id);
+                        window.location.href = 'index.html';
+                    } else {
+                        errorBox.innerHTML = "Leerling niet gevonden in de database.<br><br><b>Tip:</b> Gebruik 'Lukas' 'Peeters' (een mock leerling), of log even in als leerkracht om jezelf toe te voegen.";
+                        errorBox.classList.remove('hidden');
+                    }
+                }
+            } catch (err) {
+                errorBox.innerText = "Er ging iets mis met de database connectie.";
+                errorBox.classList.remove('hidden');
+                console.error(err);
+            }
+        }
+    </script>
 </body>
 </html>
