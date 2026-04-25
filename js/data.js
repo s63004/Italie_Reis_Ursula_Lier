@@ -98,10 +98,10 @@ async function initializeDB() {
     const meisjesNamen = ['Olivia', 'Mila', 'Marie', 'Ella', 'Anna', 'Emma', 'Louise', 'Elena', 'Juliette', 'Lucie'];
     const achternamen = ['Peeters', 'Janssens', 'Maes', 'Jacobs', 'Mertens', 'Willems', 'Claes', 'Goossens'];
 
-    let leerlingId = 1;
     for (let i = 0; i < 30; i++) {
-        personenToInsert.push({ id: 'mockM_' + leerlingId++, vnaam: jongensNamen[Math.floor(Math.random() * jongensNamen.length)], naam: achternamen[Math.floor(Math.random() * achternamen.length)], geslacht: 'M', klas: '6A', rol: 'LEERLING' });
-        personenToInsert.push({ id: 'mockV_' + leerlingId++, vnaam: meisjesNamen[Math.floor(Math.random() * meisjesNamen.length)], naam: achternamen[Math.floor(Math.random() * achternamen.length)], geslacht: 'V', klas: '6B', rol: 'LEERLING' });
+        // OPLOSSING: We geven GEEN tekst 'id' meer mee. De database genereert nu automatisch een uniek BIGINT getal.
+        personenToInsert.push({ vnaam: jongensNamen[Math.floor(Math.random() * jongensNamen.length)], naam: achternamen[Math.floor(Math.random() * achternamen.length)], geslacht: 'M', klas: '6A', rol: 'LEERLING' });
+        personenToInsert.push({ vnaam: meisjesNamen[Math.floor(Math.random() * meisjesNamen.length)], naam: achternamen[Math.floor(Math.random() * achternamen.length)], geslacht: 'V', klas: '6B', rol: 'LEERLING' });
     }
     await supabaseClient.from('persoon').insert(personenToInsert);
 }
@@ -135,7 +135,6 @@ async function login(naam, vnaam, geslacht, isLeerkracht = false, studentId = nu
         }
     } else {
         // Leerlingen: Alleen updaten als ze bestaan (meestal gematcht op naam in loginSS.php)
-        // We verwachten hier de INTERNE numerieke ID die uit de match kwam
         internalId = studentId;
 
         // Update geslacht en eventueel ss_id voor de koppeling
@@ -258,14 +257,19 @@ async function getKamersMetStatus(hotel_id, geslacht) {
 
 // Reserveer een plek via atomaire database functie (PESSIMISTIC LOCKING)
 async function reserveerPlek(kamerId, persoon_id) {
-    // Eerst: welk hotel is deze kamer?
+    // OPLOSSING: We controleren of de ID puur een getal is. 
+    // Is het een oude tekst-ID? Dan blokkeren we dit en vragen we de leerling om even opnieuw in te loggen.
+    const numericPersoonId = parseInt(persoon_id);
+    if (isNaN(numericPersoonId)) {
+        return { success: false, message: 'Oude accountgegevens (Ghost Data) gedetecteerd. Klik rechtsboven op "Uitloggen" en log even opnieuw in.' };
+    }
+
     const { data: kamer } = await supabaseClient.from('kamer').select('hotel_id').eq('id', kamerId).single();
     if (!kamer) return { success: false, message: 'Kamer niet gevonden.' };
 
-    // Roep de database functie aan — deze handelt alle concurrency af
     const { data, error } = await supabaseClient.rpc('claim_kamer', {
         p_kamer_id: parseInt(kamerId),
-        p_persoon_id: parseInt(persoon_id),
+        p_persoon_id: numericPersoonId,
         p_hotel_id: parseInt(kamer.hotel_id)
     });
 
@@ -275,17 +279,17 @@ async function reserveerPlek(kamerId, persoon_id) {
     }
 
     if (data && data.success) {
-        await writeLog('RESERVEER_PENDING', persoon_id, `Kamer ${kamerId} geselecteerd`);
+        await writeLog('RESERVEER_PENDING', numericPersoonId, `Kamer ${kamerId} geselecteerd`);
         return {
             success: true,
-            server_ts: data.server_ts // Server timestamp voor de timer
+            server_ts: data.server_ts
         };
     }
 
     return { success: false, message: data?.message || 'Onbekende fout.' };
 }
 
-// Zoek studenten voor autocomplete (gefilterd op geslacht, exclusief reeds bezette)
+// Zoek studenten voor autocomplete
 async function searchStudent(query, geslacht, hotelId) {
     if (!query || query.length < 2) return [];
 
@@ -313,9 +317,18 @@ async function searchStudent(query, geslacht, hotelId) {
 
 // Bevestig reservering via atomaire database functie
 async function bevestigReservatie(persoon_id, roommateIds = []) {
+    // OPLOSSING: Zelfde controle op Ghost Data
+    const numericPersoonId = parseInt(persoon_id);
+    if (isNaN(numericPersoonId)) {
+        return { success: false, message: 'Oude accountgegevens (Ghost Data) gedetecteerd. Klik rechtsboven op "Uitloggen" en log opnieuw in.' };
+    }
+
+    // Zet ook alle medebewoners om naar pure getallen en filter corrupte ID's eruit
+    const safeRoommateIds = roommateIds.length > 0 ? roommateIds.map(id => parseInt(id)).filter(id => !isNaN(id)) : null;
+
     const { data, error } = await supabaseClient.rpc('bevestig_kamer', {
-        p_persoon_id: parseInt(persoon_id),
-        p_roommate_ids: roommateIds.length > 0 ? roommateIds.map(id => parseInt(id)) : null
+        p_persoon_id: numericPersoonId,
+        p_roommate_ids: safeRoommateIds
     });
 
     if (error) {
@@ -324,7 +337,7 @@ async function bevestigReservatie(persoon_id, roommateIds = []) {
     }
 
     if (data && data.success) {
-        await writeLog('RESERVEER_BEVESTIGD', persoon_id, `Kamer bevestigd met ${roommateIds.length} roommates`);
+        await writeLog('RESERVEER_BEVESTIGD', numericPersoonId, `Kamer bevestigd met ${safeRoommateIds ? safeRoommateIds.length : 0} roommates`);
         return { success: true };
     }
 
@@ -333,15 +346,18 @@ async function bevestigReservatie(persoon_id, roommateIds = []) {
 
 // Annuleer pending
 async function annuleerPending(persoon_id) {
+    const numericPersoonId = parseInt(persoon_id);
+    if (isNaN(numericPersoonId)) return;
+
     const { data } = await supabaseClient
         .from('reservering')
         .delete()
-        .eq('persoon_id', persoon_id)
+        .eq('persoon_id', numericPersoonId)
         .eq('status', 'pending')
         .select();
 
     if (data && data.length > 0) {
-        await writeLog('ANNULEER', persoon_id, `Pending reservering geannuleerd`);
+        await writeLog('ANNULEER', numericPersoonId, `Pending reservering geannuleerd`);
     }
 }
 
@@ -460,12 +476,13 @@ async function addLeerling(vnaam, naam, geslacht) {
 }
 
 async function deleteLeerling(id) {
-    const { count } = await supabaseClient.from('reservering').select('*', { count: 'exact', head: true }).eq('persoon_id', id);
+    const numericId = parseInt(id);
+    const { count } = await supabaseClient.from('reservering').select('*', { count: 'exact', head: true }).eq('persoon_id', numericId);
     if (count > 0) return { success: false, message: "Deze leerling heeft al een kamer. Verwijder eerst de reservatie." };
 
-    await supabaseClient.from('persoon').delete().eq('id', id);
+    await supabaseClient.from('persoon').delete().eq('id', numericId);
     const u = getCurrentUser();
-    await writeLog('ADMIN_DELETE_PERSOON', u.id, `Persoon ${id} verwijderd`);
+    await writeLog('ADMIN_DELETE_PERSOON', u.id, `Persoon ${numericId} verwijderd`);
     return { success: true };
 }
 
@@ -491,8 +508,8 @@ async function importCSVLeerlingen(csvText) {
                     klas: parts[0],
                     naam: parts[1],
                     vnaam: parts[2],
-                    rol: parts[3].toUpperCase(), // LEERLING of LEERKRACHT
-                    geslacht: parts[4] ? parts[4].toUpperCase() : null // M of V
+                    rol: parts[3].toUpperCase(),
+                    geslacht: parts[4] ? parts[4].toUpperCase() : null
                 });
             }
         }
