@@ -29,41 +29,54 @@
             <p class="text-white/90 text-lg">Italiëreis Kamerverdeling</p>
         </div>
 
-        <div class="mt-8">
+        <div class="space-y-4">
             <a href="loginSS.php?aanmelden=1" class="flex items-center justify-center w-full bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition transform hover:-translate-y-0.5">
                 <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path></svg>
                 Inloggen via Smartschool
             </a>
-            <p class="text-sm text-white/70 text-center mt-4">Je wordt doorgestuurd naar de veilige Smartschool login omgeving.</p>
+
+            <button onclick="document.getElementById('devForm').classList.toggle('hidden')" class="flex items-center justify-center w-full bg-white/20 hover:bg-white/30 text-white font-bold py-4 px-6 rounded-xl border-2 border-white/40 shadow-lg transition transform hover:-translate-y-0.5 focus:outline-none">
+                <svg class="w-6 h-6 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                Handmatige Test-Login (Dev Mode)
+            </button>
         </div>
 
-        <div class="mt-6 border-t border-white/20 pt-4">
-            <button onclick="document.getElementById('devForm').classList.toggle('hidden')" class="w-full text-center text-xs text-white/50 hover:text-white underline transition focus:outline-none">
-                Gebruik handmatige test-login (Dev Mode)
-            </button>
-            
-            <div id="devForm" class="hidden mt-4 bg-white/10 p-4 rounded-xl border border-white/20 space-y-3 shadow-inner">
-                <input type="text" id="dev_vnaam" placeholder="Voornaam (bijv. Lukas)" class="w-full p-2 rounded-lg bg-white/90 text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-                <input type="text" id="dev_naam" placeholder="Achternaam (bijv. Peeters)" class="w-full p-2 rounded-lg bg-white/90 text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-                
-                <select id="dev_geslacht" class="w-full p-2 rounded-lg bg-white/90 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
-                    <option value="M">Jongen (M)</option>
-                    <option value="V">Meisje (V)</option>
-                </select>
+        <p class="text-sm text-white/70 text-center mt-6">Gebruik de Smartschool knop voor de live-versie, of de Test-Login voor ontwikkeling.</p>
 
-                <div class="flex items-center gap-2 text-white text-sm">
-                    <input type="checkbox" id="dev_isLeerkracht" class="rounded text-orange-500 focus:ring-orange-500 cursor-pointer" onchange="document.getElementById('dev_pw_container').classList.toggle('hidden')">
-                    <label for="dev_isLeerkracht" class="cursor-pointer">Ik ben leerkracht</label>
+        <div id="devForm" class="hidden mt-6 bg-white/90 p-6 rounded-2xl shadow-inner space-y-4">
+            <h3 class="text-gray-800 font-bold text-lg border-b pb-2">Test Gegevens</h3>
+            
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Voornaam</label>
+                    <input type="text" id="dev_vnaam" placeholder="Bijv. Lukas" class="w-full p-3 rounded-xl border border-gray-200 text-gray-800 focus:ring-2 focus:ring-orange-400 focus:outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Achternaam</label>
+                    <input type="text" id="dev_naam" placeholder="Bijv. Peeters" class="w-full p-3 rounded-xl border border-gray-200 text-gray-800 focus:ring-2 focus:ring-orange-400 focus:outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Geslacht</label>
+                    <select id="dev_geslacht" class="w-full p-3 rounded-xl border border-gray-200 text-gray-800 focus:ring-2 focus:ring-orange-400 focus:outline-none transition">
+                        <option value="M">Jongen (M)</option>
+                        <option value="V">Meisje (V)</option>
+                    </select>
+                </div>
+
+                <div class="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                    <input type="checkbox" id="dev_isLeerkracht" class="w-4 h-4 rounded text-orange-500 focus:ring-orange-500 cursor-pointer" onchange="document.getElementById('dev_pw_container').classList.toggle('hidden')">
+                    <label for="dev_isLeerkracht" class="text-sm text-gray-700 font-semibold cursor-pointer">Ik ben leerkracht</label>
                 </div>
 
                 <div id="dev_pw_container" class="hidden">
-                    <input type="password" id="dev_pw" placeholder="Wachtwoord (bijv. UrsulaItalie2026)" class="w-full p-2 rounded-lg bg-white/90 text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400">
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Admin Wachtwoord</label>
+                    <input type="password" id="dev_pw" placeholder="Wachtwoord" class="w-full p-3 rounded-xl border border-gray-200 text-gray-800 focus:ring-2 focus:ring-orange-400 focus:outline-none transition">
                 </div>
 
-                <div id="dev_error" class="hidden text-red-200 text-xs font-medium bg-red-900/60 p-2 rounded border border-red-500/50"></div>
+                <div id="dev_error" class="hidden text-red-700 text-xs font-bold bg-red-50 p-3 rounded-xl border border-red-200"></div>
 
-                <button onclick="devLogin()" class="w-full bg-gray-800 hover:bg-gray-900 text-white font-semibold py-2.5 rounded-lg shadow transition text-sm">
-                    Inloggen zonder Smartschool
+                <button onclick="devLogin()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-xl shadow-md transition">
+                    Nu Inloggen
                 </button>
             </div>
         </div>
@@ -84,7 +97,7 @@
             errorBox.classList.add('hidden');
 
             if (!vnaam || !naam) {
-                errorBox.innerText = "Vul a.u.b. een voornaam en achternaam in.";
+                errorBox.innerText = "Vul a.u.b. beide namen in.";
                 errorBox.classList.remove('hidden');
                 return;
             }
@@ -94,15 +107,13 @@
                     const pw = document.getElementById('dev_pw').value;
                     const isValid = await window.dbApi.verifyTeacherPassword(pw);
                     if (!isValid) {
-                        errorBox.innerText = "Fout leerkracht-wachtwoord.";
+                        errorBox.innerText = "Fout wachtwoord.";
                         errorBox.classList.remove('hidden');
                         return;
                     }
-                    // Leerkracht dev login
                     await window.dbApi.login(naam, vnaam, geslacht, true, "dev_lk_" + Date.now());
                     window.location.href = 'admin.html';
                 } else {
-                    // Zoek leerling in database (analoog aan loginSS.php)
                     const alleLeerlingen = await window.dbApi.getAllLeerlingen();
                     const match = alleLeerlingen.find(l => 
                         l.vnaam.toLowerCase() === vnaam.toLowerCase() && 
@@ -113,14 +124,13 @@
                         await window.dbApi.login(naam, vnaam, geslacht, false, match.id);
                         window.location.href = 'index.html';
                     } else {
-                        errorBox.innerHTML = "Leerling niet gevonden in de database.<br><br><b>Tip:</b> Gebruik 'Lukas' 'Peeters' (een mock leerling), of log even in als leerkracht om jezelf toe te voegen.";
+                        errorBox.innerHTML = "Naam niet gevonden in de lijst.<br>Tip: Gebruik 'Lukas' 'Peeters'.";
                         errorBox.classList.remove('hidden');
                     }
                 }
             } catch (err) {
-                errorBox.innerText = "Er ging iets mis met de database connectie.";
+                errorBox.innerText = "Database fout.";
                 errorBox.classList.remove('hidden');
-                console.error(err);
             }
         }
     </script>
