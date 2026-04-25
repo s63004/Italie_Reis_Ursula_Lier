@@ -25,14 +25,14 @@ class App {
         await window.dbApi.initializeDB();
         await window.dbApi.syncServerTime();
 
-        this.render();
+        this.render(true); // Forceer de allereerste render
 
         // Realtime WebSockets
         const channel = window.dbApi.supabaseClient
             .channel('realtime_reserveringen')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'reservering' }, payload => {
                 console.log('⚡ LIVE update ontvangen:', payload);
-                this.render();
+                this.render(); // Zachte render (wordt genegeerd als je typt)
             })
             .subscribe((status) => {
                 console.log('🔌 Realtime status:', status);
@@ -41,7 +41,7 @@ class App {
         // Fallback: ververs data elke 5 seconden
         setInterval(async () => {
             await window.dbApi.checkTimeouts();
-            this.render();
+            this.render(); // Zachte render (wordt genegeerd als je typt)
         }, 5000);
 
         // Timer tikt elke seconde (ONAFHANKELIJK van render)
@@ -53,7 +53,7 @@ class App {
     // ─── TIMER LOGICA (robuust, niet-onderbreekbaar) ───
 
     _startTimer(serverTimestamp) {
-        if (this._timerActive) return; // Al actief, niet opnieuw starten
+        if (this._timerActive) return; 
         this._lockStartServerMs = serverTimestamp;
         this._timerActive = true;
         console.log('⏱️ Timer gestart, server_ts:', serverTimestamp);
@@ -112,17 +112,24 @@ class App {
             ? "px-6 py-2 rounded-lg font-medium text-sm transition shadow-sm bg-white text-gray-800"
             : "px-6 py-2 rounded-lg font-medium text-sm transition text-gray-600 hover:text-gray-800";
 
-        this.render();
+        this.render(true); // Forceer render bij wisselen van tabblad
     }
 
     // ─── MAIN RENDER ───
 
-    async render() {
+    async render(force = false) {
+        // OPLOSSING: Controleer of de gebruiker aan het typen is
+        const isTyping = document.activeElement && document.activeElement.tagName === 'INPUT';
+        
+        // Als de gebruiker typt, en het is geen verplichte (force) update, stop dan met renderen!
+        if (isTyping && !force) {
+            return;
+        }
+
         const overlay = document.getElementById('cardOverlay');
         const container = document.getElementById('kamersContainer');
         const kamers = await window.dbApi.getKamersMetStatus(this.currentHotelId, this.user.geslacht);
 
-        // Zoek of de user een reservatie heeft
         let userRes = null;
         for (let kamer of kamers) {
             const res = kamer.reservaties.find(r => r.gebruikerid === this.user.id);
@@ -131,14 +138,12 @@ class App {
         const hasPending = userRes && userRes.status === 'pending';
         const hasConfirmed = userRes && userRes.status === 'confirmed';
 
-        // Avatar kleuren
         const getAvatarStyle = (name) => {
             let hash = 0;
             for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
             return `background: linear-gradient(135deg, hsl(${Math.abs(hash % 360)}, 70%, 60%), hsl(${(Math.abs(hash % 360) + 40) % 360}, 70%, 50%)); color: white;`;
         };
 
-        // Timer state beheer — ALLEEN starten als nog niet actief
         if (hasPending) {
             this._startTimer(userRes.timestamp);
             overlay.classList.remove('hidden');
@@ -151,7 +156,7 @@ class App {
             this.selectedRoommates = {};
         }
 
-        // OPLOSSING STAP 1: Bewaar het actieve veld voordat we het scherm wissen
+        // We bewaren de focus voor de zekerheid (bijv. als er wél een 'force' was)
         const activeElementId = document.activeElement ? document.activeElement.id : null;
 
         container.innerHTML = '';
@@ -160,8 +165,6 @@ class App {
             const isFull = kamer.vrij <= 0;
             const isUserRoom = userRes && userRes.kamerid === kamer.id;
             const isThisPending = isUserRoom && userRes.status === 'pending';
-
-            // Is deze kamer gelocked door IEMAND ANDERS?
             const lockedByOther = kamer.isLocked && !isUserRoom;
 
             let cardClasses = `kamer-card bg-white rounded-2xl p-5 border border-gray-200 relative overflow-visible `;
@@ -177,14 +180,12 @@ class App {
             const card = document.createElement('div');
             card.className = cardClasses;
 
-            // Timer HTML
             let timerHtml = '';
             if (isThisPending) {
                 const rem = this._getRemaining();
                 timerHtml = `<div class="bg-orange-100 text-orange-700 px-3 py-1 rounded-lg font-bold font-mono shadow-inner text-lg" id="timerDisplay">${rem >= 0 ? rem : 60}s</div>`;
             }
 
-            // Frozen overlay voor andere leerlingen
             let frozenOverlay = '';
             if (lockedByOther) {
                 frozenOverlay = `
@@ -194,7 +195,6 @@ class App {
                     </div>`;
             }
 
-            // Header & Progress Bar
             const fillPct = (kamer.bezet / kamer.capaciteit) * 100;
             const progressColor = isFull ? 'bg-red-500' : 'bg-orange-500';
 
@@ -216,7 +216,6 @@ class App {
                 </div>
             `;
 
-            // Bewoners lijst
             let lijstHtml = '<ul class="space-y-3 mb-6 min-h-[80px] relative">';
 
             kamer.reservaties.forEach(r => {
@@ -233,7 +232,6 @@ class App {
                 `;
             });
 
-            // Vrije bedden / Inputs
             const bedIcon = `<svg class="w-5 h-5 text-gray-300" fill="currentColor" viewBox="0 0 24 24"><path d="M19 7h-6V6a3 3 0 0 0-3-3H4a1 1 0 0 0-1 1v15a1 1 0 0 0 1 1h1v1a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1h1a1 1 0 0 0 1-1V10a3 3 0 0 0-3-3zM5 5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2H5V5zm16 12H3V9h18v8z"/></svg>`;
 
             for (let i = 0; i < kamer.vrij; i++) {
@@ -254,7 +252,6 @@ class App {
                             </li>
                         `;
                     } else {
-                        // OPLOSSING STAP 2: We voegen een uniek ID 'search-slot-${i}' toe aan het input veld
                         lijstHtml += `
                             <li class="relative">
                                 <div class="flex items-center bg-gray-50 rounded-xl p-1 border border-gray-200 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
@@ -280,7 +277,6 @@ class App {
             }
             lijstHtml += '</ul>';
 
-            // Knoppen
             let buttonHtml = '';
             if (isThisPending) {
                 buttonHtml = `
@@ -317,12 +313,10 @@ class App {
             container.appendChild(card);
         });
 
-        // OPLOSSING STAP 3: Zet de focus (en de typ-cursor) terug naar het veld
         if (activeElementId) {
             const el = document.getElementById(activeElementId);
             if (el) {
                 el.focus();
-                // Dit zorgt dat de cursor helemaal achteraan de al ingetypte tekst gaat staan
                 const val = el.value;
                 el.value = '';
                 el.value = val;
@@ -375,12 +369,12 @@ class App {
     selectRoommate(slotIndex, id, vnaam, naam) {
         this.selectedRoommates[slotIndex] = { id, vnaam, naam };
         this.roommateSearchQuery[slotIndex] = '';
-        this.render();
+        this.render(true); // Verplichte render omdat de status van de kamer is gewijzigd
     }
 
     removeRoommate(slotIndex) {
         delete this.selectedRoommates[slotIndex];
-        this.render();
+        this.render(true); // Verplichte render omdat de status is gewijzigd
     }
 
     // ─── ACTIES ───
@@ -388,11 +382,10 @@ class App {
     async join(kamerId) {
         const res = await window.dbApi.reserveerPlek(kamerId, this.user.id);
         if (res.success) {
-            // Start timer met de server timestamp uit de RPC response
             if (res.server_ts) {
                 this._startTimer(res.server_ts);
             }
-            this.render();
+            this.render(true); // Verplichte render om de popup te tonen
         } else {
             this.showAlert(res.message, "error");
         }
@@ -412,7 +405,7 @@ class App {
             this.showAlert("Opgeslagen! Controleer je kamers.", "success");
         } else {
             this.showAlert(res.message, "error");
-            this.render();
+            this.render(true);
         }
     }
 
@@ -421,7 +414,7 @@ class App {
         await window.dbApi.annuleerPending(this.user.id);
         this.roommateSearchQuery = {};
         this.selectedRoommates = {};
-        this.render();
+        this.render(true); // Verplichte render om de popup te sluiten
     }
 
     logout() {
