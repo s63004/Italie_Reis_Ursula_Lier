@@ -151,6 +151,9 @@ class App {
             this.selectedRoommates = {};
         }
 
+        // OPLOSSING STAP 1: Bewaar het actieve veld voordat we het scherm wissen
+        const activeElementId = document.activeElement ? document.activeElement.id : null;
+
         container.innerHTML = '';
 
         kamers.forEach(kamer => {
@@ -251,13 +254,14 @@ class App {
                             </li>
                         `;
                     } else {
+                        // OPLOSSING STAP 2: We voegen een uniek ID 'search-slot-${i}' toe aan het input veld
                         lijstHtml += `
                             <li class="relative">
                                 <div class="flex items-center bg-gray-50 rounded-xl p-1 border border-gray-200 focus-within:border-orange-400 focus-within:ring-2 focus-within:ring-orange-100 transition-all">
                                     <div class="w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center mr-2 shrink-0 shadow-sm text-gray-400">
                                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                                     </div>
-                                    <input type="text" placeholder="Zoek medeleerling..." value="${slotVal}" onkeyup="window.app.handleSearch(event, ${i})" class="w-full text-sm p-1 bg-transparent border-none focus:outline-none focus:ring-0 text-gray-700">
+                                    <input type="text" id="search-slot-${i}" placeholder="Zoek medeleerling..." value="${slotVal}" onkeyup="window.app.handleSearch(event, ${i})" class="w-full text-sm p-1 bg-transparent border-none focus:outline-none focus:ring-0 text-gray-700">
                                 </div>
                                 <div id="dropdown-${i}" class="absolute z-10 w-[90%] left-[5%] mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl hidden max-h-40 overflow-y-auto"></div>
                             </li>
@@ -312,6 +316,18 @@ class App {
             card.innerHTML = frozenOverlay + headerHtml + lijstHtml + buttonHtml;
             container.appendChild(card);
         });
+
+        // OPLOSSING STAP 3: Zet de focus (en de typ-cursor) terug naar het veld
+        if (activeElementId) {
+            const el = document.getElementById(activeElementId);
+            if (el) {
+                el.focus();
+                // Dit zorgt dat de cursor helemaal achteraan de al ingetypte tekst gaat staan
+                const val = el.value;
+                el.value = '';
+                el.value = val;
+            }
+        }
     }
 
     // ─── SEARCH & ROOMMATES ───
