@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <title>Supabase Read/Write Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f4f4f9; }
+        .test-box { background: white; padding: 15px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .loading { color: orange; font-style: italic; }
+        pre { background: #eee; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Supabase Read/Write Test</h1>
+    <p>We testen nu of we met de geldige "Publishable Key" ook data kunnen <strong>opslaan</strong> en verwijderen in je database.</p>
+
+    <div id="results"></div>
+
+    <script>
+        const projectUrl = 'https://zwtviuaqnwjxuoybdnnp.supabase.co';
+        // We gebruiken de sleutel die in de vorige test groen werd.
+        const validKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp3dHZpdWFxbndqeHVveWJkbm5wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5NTY0NTUsImV4cCI6MjA5MjUzMjQ1NX0.1fyQg8VuVbbDR2V07hUN0H9FvMkAccUhqQ-bSGAQg2E";
+
+        const resultsDiv = document.getElementById('results');
+        const testHotelId = 9999; // Een veilig test ID
+
+        function createBox(title) {
+            const box = document.createElement('div');
+            box.className = 'test-box';
+            const id = 'box-' + Math.random().toString(36).substr(2, 9);
+            box.innerHTML = `<h3>${title}</h3><p class="loading" id="status-${id}">Bezig...</p><pre id="output-${id}"></pre>`;
+            resultsDiv.appendChild(box);
+            return id;
+        }
+
+        async function updateBox(id, response) {
+            const outputEl = document.getElementById(`output-${id}`);
+            const statusEl = document.getElementById(`status-${id}`);
+            
+            if (response.ok) {
+                let data = "";
+                try { data = await response.json(); } catch(e) { data = "Geen JSON data teruggekregen (vaak OK bij delete)"; }
+                statusEl.className = 'success';
+                statusEl.innerText = "SUCCES!";
+                outputEl.innerText = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+                return true;
+            } else {
+                let errorText = await response.text();
+                statusEl.className = 'error';
+                statusEl.innerText = `FOUT: ${response.status} ${response.statusText}`;
+                outputEl.innerText = errorText;
+                return false;
+            }
+        }
+
+        async function runTests() {
+            // 1. READ Test
+            let id1 = createBox("Stap 1: Lezen (GET hotels)");
+            try {
+                const res1 = await fetch(`${projectUrl}/rest/v1/hotel?select=*`, {
+                    method: 'GET',
+                    headers: { 'apikey': validKey, 'Authorization': `Bearer ${validKey}` }
+                });
+                await updateBox(id1, res1);
+            } catch(e) { document.getElementById(`status-${id1}`).innerText = "Netwerk Fout"; }
+
+            // 2. WRITE Test
+            let id2 = createBox("Stap 2: Opslaan (INSERT test hotel)");
+            let writeSuccess = false;
+            try {
+                const res2 = await fetch(`${projectUrl}/rest/v1/hotel`, {
+                    method: 'POST',
+                    headers: { 
+                        'apikey': validKey, 
+                        'Authorization': `Bearer ${validKey}`,
+                        'Content-Type': 'application/json',
+                        'Prefer': 'return=representation' // Stuur de gemaakte data terug
+                    },
+                    body: JSON.stringify({ id: testHotelId, naam: 'TEST HOTEL VERWIJDER MIJ' })
+                });
+                writeSuccess = await updateBox(id2, res2);
+            } catch(e) { document.getElementById(`status-${id2}`).innerText = "Netwerk Fout"; }
+
+            // 3. DELETE Test (alleen als write lukt, om boel netjes te houden)
+            if (writeSuccess) {
+                let id3 = createBox("Stap 3: Verwijderen (DELETE test hotel)");
+                try {
+                    const res3 = await fetch(`${projectUrl}/rest/v1/hotel?id=eq.${testHotelId}`, {
+                        method: 'DELETE',
+                        headers: { 'apikey': validKey, 'Authorization': `Bearer ${validKey}` }
+                    });
+                    await updateBox(id3, res3);
+                } catch(e) { document.getElementById(`status-${id3}`).innerText = "Netwerk Fout"; }
+            } else {
+                let id3 = createBox("Stap 3: Verwijderen overgeslagen");
+                document.getElementById(`status-${id3}`).className = 'error';
+                document.getElementById(`status-${id3}`).innerText = "Opslaan is mislukt, dus we kunnen niks verwijderen. Misschien missen er permissies (GRANT) in de database?";
+            }
+        }
+
+        runTests();
+    </script>
+</body>
+</html>
