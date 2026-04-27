@@ -54,10 +54,25 @@ async function getAppSettings() {
     }, {});
 }
 
-async function getHotels() {
-    const { data, error } = await supabaseClient.from('hotel').select('*').order('id');
+async function getHotels(onlyActive = false) {
+    let query = supabaseClient.from('hotel').select('*').order('id');
+    if (onlyActive) query = query.eq('is_actief', true);
+    
+    const { data, error } = await query;
     if (error) console.error("Fout bij ophalen hotels", error);
     return data || [];
+}
+
+async function addHotel(naam, bg_image) {
+    await supabaseClient.from('hotel').insert([{ naam, bg_image, is_actief: false }]);
+    const u = getCurrentUser();
+    await writeLog('ADMIN_ADD_HOTEL', u.id, `Bestemming ${naam} toegevoegd`);
+    return { success: true };
+}
+
+async function toggleHotelActief(id, is_actief) {
+    await supabaseClient.from('hotel').update({ is_actief }).eq('id', id);
+    return { success: true };
 }
 
 async function initializeDB() {
@@ -355,5 +370,5 @@ window.dbApi = {
     syncServerTime, getEstimatedServerTime, verifyTeacherPassword, updateTeacherPassword,
     getAllKamersAdmin, addKamer, updateKamer, deleteKamer, removeReservatieAdmin,
     getAllLeerlingen, addLeerling, deleteLeerling, importCSVLeerlingen,
-    getAppSettings, getHotels, supabaseClient
+    getAppSettings, getHotels, addHotel, toggleHotelActief, supabaseClient
 };
