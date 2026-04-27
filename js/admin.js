@@ -45,7 +45,7 @@ class AdminApp {
             this.changePassword();
         });
 
-        // Event listener voor bestemming toevoegen (beschermd tegen null if form not loaded)
+        // Event listener voor bestemming toevoegen (inclusief afbeelding)
         const addBestemmingForm = document.getElementById('addBestemmingForm');
         if (addBestemmingForm) {
             addBestemmingForm.addEventListener('submit', (e) => {
@@ -112,7 +112,7 @@ class AdminApp {
         this.refreshCurrentTab();
     }
 
-    // --- NIEUW: BESTEMMINGEN LOGICA ---
+    // --- BESTEMMINGEN LOGICA ---
     async renderBestemmingen() {
         const tbody = document.getElementById('bestemmingenTableBody');
         if (!tbody) return;
@@ -122,7 +122,7 @@ class AdminApp {
 
         alleHotels.forEach(h => {
             const tr = document.createElement('tr');
-            tr.className = 'border-b hover:bg-gray-50';
+            tr.className = 'border-b hover:bg-gray-50 transition';
             
             const checkedState = h.is_actief ? 'checked' : '';
             
@@ -133,7 +133,7 @@ class AdminApp {
                 <td class="p-3 text-center">
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" ${checkedState} onchange="window.adminApp.toggleBestemming(${h.id}, this.checked)" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500 shadow-sm"></div>
                     </label>
                 </td>
             `;
@@ -145,15 +145,19 @@ class AdminApp {
         const naam = document.getElementById('b_naam').value;
         const foto = document.getElementById('b_foto').value;
 
-        await window.dbApi.addHotel(naam, foto);
+        const res = await window.dbApi.addHotel(naam, foto);
         
-        this.hotels = await window.dbApi.getHotels(false);
-        this.populateHotelDropdown();
-        
-        this.showAlert("Bestemming toegevoegd! (Staat standaard onzichtbaar)", "success");
-        const form = document.getElementById('addBestemmingForm');
-        if(form) form.reset();
-        this.renderBestemmingen();
+        if (res.success) {
+            this.hotels = await window.dbApi.getHotels(false);
+            this.populateHotelDropdown();
+            
+            this.showAlert("Bestemming toegevoegd! (Staat standaard onzichtbaar)", "success");
+            const form = document.getElementById('addBestemmingForm');
+            if(form) form.reset();
+            this.renderBestemmingen();
+        } else {
+            this.showAlert("Er ging iets mis bij het toevoegen.", "error");
+        }
     }
 
     async toggleBestemming(id, isActief) {
@@ -184,8 +188,8 @@ class AdminApp {
                 <td class="p-3">${k.geslacht === 'M' ? 'Jongens' : 'Meisjes'}</td>
                 <td class="p-3">${k.capaciteit} (Bezet: ${k.bezet})</td>
                 <td class="p-3">
-                    <button onclick="window.adminApp.openEditKamer(${k.id}, '${k.kamer_nr}', ${k.capaciteit}, '${k.geslacht}')" class="text-blue-500 hover:underline mr-3">Bewerk</button>
-                    ${k.bezet === 0 ? `<button onclick="window.adminApp.deleteKamer(${k.id})" class="text-red-500 hover:underline">Verwijder</button>` : '<span class="text-gray-400 text-xs">Bezet</span>'}
+                    <button onclick="window.adminApp.openEditKamer(${k.id}, '${k.kamer_nr}', ${k.capaciteit}, '${k.geslacht}')" class="text-blue-500 hover:underline mr-3 font-medium">Bewerk</button>
+                    ${k.bezet === 0 ? `<button onclick="window.adminApp.deleteKamer(${k.id})" class="text-red-500 hover:underline font-medium">Verwijder</button>` : '<span class="text-gray-400 text-xs italic">Bezet</span>'}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -263,8 +267,8 @@ class AdminApp {
             
             let html = `
                 <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h4 class="font-bold">Kamer ${k.kamer_nr} <span class="text-xs font-normal text-gray-500 ml-2">(${hotelNaam} - ${k.geslacht})</span></h4>
-                    <span class="text-xs font-semibold px-2 py-1 bg-gray-100 rounded">${k.bezet}/${k.capaciteit}</span>
+                    <h4 class="font-bold text-gray-800">Kamer ${k.kamer_nr} <span class="text-xs font-normal text-gray-500 ml-2">(${hotelNaam} - ${k.geslacht})</span></h4>
+                    <span class="text-xs font-bold px-2 py-1 bg-gray-100 text-gray-600 rounded">${k.bezet}/${k.capaciteit}</span>
                 </div>
                 <ul class="space-y-2">
             `;
@@ -276,10 +280,10 @@ class AdminApp {
                 html += `
                     <li class="flex justify-between items-center text-sm p-2 bg-gray-50 rounded border border-gray-100">
                         <div>
-                            <span class="font-medium">${user ? user.vnaam + ' ' + user.naam : 'Onbekend'}</span>
-                            <span class="text-xs ${statusColor} ml-2">(${r.status})</span>
+                            <span class="font-medium text-gray-800">${user ? user.vnaam + ' ' + user.naam : 'Onbekend'}</span>
+                            <span class="text-xs ${statusColor} font-semibold ml-2">(${r.status})</span>
                         </div>
-                        <button onclick="window.adminApp.kickUser('${r.id}')" class="text-xs bg-red-100 text-red-600 hover:bg-red-200 px-2 py-1 rounded transition">Verwijder</button>
+                        <button onclick="window.adminApp.kickUser('${r.id}')" class="text-xs bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1 rounded font-medium transition">Verwijder</button>
                     </li>
                 `;
             });
@@ -291,7 +295,7 @@ class AdminApp {
     }
 
     async kickUser(resId) {
-        if(confirm("Weet je zeker dat je deze reservatie wilt verwijderen? De leerling verliest zijn plaats.")) {
+        if(confirm("Weet je zeker dat je deze reservatie wilt verwijderen? De leerling verliest zijn plaats in deze kamer.")) {
             await window.dbApi.removeReservatieAdmin(resId);
             this.showAlert("Reservatie verwijderd. De plaats is nu vrij.", "info");
             this.renderReservaties();
@@ -312,28 +316,28 @@ class AdminApp {
             const userRes = (alleReservaties || []).filter(r => r.persoon_id === l.id && r.status === 'confirmed');
             let statusHtml;
             if (userRes.length >= 2) {
-                statusHtml = `<span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded font-medium">Volledig in orde</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded font-bold">Volledig in orde</span>`;
             } else if (userRes.length === 1) {
-                statusHtml = `<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-medium">1 reservatie</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-bold">1 reservatie</span>`;
             } else {
-                statusHtml = `<span class="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded font-medium">Nog niet</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded font-bold">Nog niet</span>`;
             }
             const hasRes = userRes.length > 0;
 
             const geslachtTxt = l.geslacht ? (l.geslacht === 'M' ? 'Jongen' : 'Meisje') : '<span class="text-gray-400 italic text-xs">Onbekend</span>';
             const klasTxt = l.klas || '-';
-            const rolTxt = l.rol === 'LEERKRACHT' || l.rol === 'LK' ? '<span class="text-purple-600 font-semibold text-xs bg-purple-50 px-2 py-1 rounded">Leerkracht</span>' : '<span class="text-blue-600 font-medium text-xs">Leerling</span>';
+            const rolTxt = l.rol === 'LEERKRACHT' || l.rol === 'LK' ? '<span class="text-purple-600 font-bold text-xs bg-purple-50 px-2 py-1 rounded border border-purple-100">Leerkracht</span>' : '<span class="text-blue-600 font-medium text-xs">Leerling</span>';
 
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50';
             tr.innerHTML = `
-                <td class="p-3 font-medium">${l.naam} ${l.vnaam}</td>
+                <td class="p-3 font-medium text-gray-800">${l.naam} ${l.vnaam}</td>
                 <td class="p-3 text-gray-600">${klasTxt}</td>
                 <td class="p-3">${rolTxt}</td>
                 <td class="p-3">${geslachtTxt}</td>
                 <td class="p-3">${statusHtml}</td>
                 <td class="p-3">
-                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-500 hover:underline">Verwijder</button>` : '<span class="text-gray-400 text-xs">Kan niet verwijderen</span>'}
+                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-500 hover:underline font-medium">Verwijder</button>` : '<span class="text-gray-400 text-xs italic">Beveiligd (Bezet)</span>'}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -375,7 +379,7 @@ class AdminApp {
     }
 
     async deleteLeerling(id) {
-        if(confirm("Leerling verwijderen uit de database?")) {
+        if(confirm("Leerling volledig verwijderen uit de database?")) {
             const res = await window.dbApi.deleteLeerling(id);
             if(res.success) {
                 this.showAlert("Leerling verwijderd.", "info");
@@ -393,7 +397,7 @@ class AdminApp {
         const confirmPw = document.getElementById('pw_confirm').value;
 
         if (newPw !== confirmPw) return this.showAlert('Nieuwe wachtwoorden komen niet overeen.', 'error');
-        if (newPw.length < 6) return this.showAlert('Minimaal 6 tekens.', 'error');
+        if (newPw.length < 6) return this.showAlert('Minimaal 6 tekens vereist.', 'error');
 
         const success = await window.dbApi.updateTeacherPassword(oldPw, newPw);
         if (success) {
