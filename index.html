@@ -3,59 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kamerverdeling - Dashboard</title>
+    <title id="pageTitle">Kamerverdeling</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-image: url('b70426ffce14d5cb756f48dbb7b7c77965c19194f27cdad21906f39bbb9d.webp');
             background-size: cover;
             background-position: center;
             background-attachment: fixed;
             transition: background-image 0.5s ease-in-out;
         }
-        .kamer-card {
-            transition: all 0.3s ease;
-        }
-        .kamer-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-        }
-        /* Lock animation */
+        .kamer-card { transition: all 0.3s ease; }
+        .kamer-card:hover { transform: translateY(-4px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); }
         @keyframes pulse-orange {
             0%, 100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.7); }
             50% { box-shadow: 0 0 0 10px rgba(249, 115, 22, 0); }
         }
-        .pending-lock {
-            border-color: #f97316;
-            animation: pulse-orange 2s infinite;
-        }
-        /* Frozen/locked room styling */
-        .frozen-room {
-            border-color: #f97316 !important;
-            border-width: 2px !important;
-            animation: pulse-orange 2s infinite;
-            position: relative;
-        }
-        .frozen-overlay {
-            border-radius: inherit;
-        }
-        /* Zorg voor een subtiele donkere overlay als de afbeelding te fel is (optioneel) */
-        .bg-overlay {
-            background-color: rgba(0, 0, 0, 0.1);
-            min-height: 100vh;
-        }
+        .pending-lock { border-color: #f97316; animation: pulse-orange 2s infinite; }
+        .frozen-room { border-color: #f97316 !important; border-width: 2px !important; animation: pulse-orange 2s infinite; position: relative; }
+        .frozen-overlay { border-radius: inherit; }
+        .bg-overlay { background-color: rgba(0, 0, 0, 0.1); min-height: 100vh; }
     </style>
 </head>
 <body class="min-h-screen text-gray-800 flex flex-col bg-overlay">
 
-    <!-- Navbar -->
     <nav class="bg-white/80 backdrop-blur-md shadow-sm sticky top-0 z-40 border-b border-white/20">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
-                    <span class="text-xl font-bold text-orange-600">Sint Ursula Italiëreis</span>
+                    <span id="navTitle" class="text-xl font-bold text-orange-600">Laden...</span>
                 </div>
                 <div class="flex items-center gap-4">
                     <div id="userInfo" class="font-medium text-gray-600"></div>
@@ -67,30 +44,21 @@
 
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <!-- Header & Status -->
         <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
                 <h1 class="text-3xl font-bold text-gray-900">Kies je kamer</h1>
                 <p class="text-gray-500 mt-1">Selecteer een bed in het gewenste hotel.</p>
             </div>
             
-            <!-- Tabs -->
-            <div class="inline-flex bg-gray-200 rounded-xl p-1">
-                <button id="tab-1" onclick="window.app.setHotel(1)" class="px-6 py-2 rounded-lg font-medium text-sm transition shadow-sm bg-white text-gray-800">Como</button>
-                <button id="tab-2" onclick="window.app.setHotel(2)" class="px-6 py-2 rounded-lg font-medium text-sm transition text-gray-600 hover:text-gray-800">Montecatini</button>
-            </div>
+            <div id="tabsContainer" class="inline-flex bg-gray-200 rounded-xl p-1 gap-1">
+                </div>
         </div>
 
-        <!-- Meldingen (Toast) -->
         <div id="alertBox" class="hidden mb-6 p-4 rounded-xl border"></div>
-
-        <!-- Overlay for expanded card -->
         <div id="cardOverlay" class="fixed inset-0 bg-gray-900/60 backdrop-blur-sm z-40 hidden opacity-0 transition-opacity duration-300"></div>
 
-        <!-- Grid Container -->
         <div id="kamersContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            <!-- Kamers worden hier via JS ingeladen -->
-        </div>
+            </div>
 
     </main>
 
