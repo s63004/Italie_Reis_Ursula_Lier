@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Italiëreis Kamerverdeling - Login</title>
+    <title id="pageTitle">Kamerverdeling - Login</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -25,8 +25,8 @@
     
     <div class="glass-panel w-full max-w-md rounded-3xl p-8 shadow-2xl">
         <div class="text-center mb-8">
-            <h1 class="text-3xl font-bold text-white mb-2 shadow-sm">Sint Ursula Instituut</h1>
-            <p class="text-white/90 text-lg">Italiëreis Kamerverdeling</p>
+            <h1 id="loginMainTitle" class="text-3xl font-bold text-white mb-2 shadow-sm">Laden...</h1>
+            <p id="loginSubTitle" class="text-white/90 text-lg"></p>
         </div>
 
         <div class="space-y-4">
@@ -87,6 +87,17 @@
     <script src="js/data.js"></script>
 
     <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const settings = await window.dbApi.getAppSettings();
+            if (settings.app_title) {
+                document.getElementById('loginMainTitle').innerText = settings.app_title;
+                document.title = settings.app_title + " - Login";
+            }
+            if (settings.school_name) {
+                document.getElementById('loginSubTitle').innerText = settings.school_name;
+            }
+        });
+
         async function devLogin() {
             const vnaam = document.getElementById('dev_vnaam').value.trim();
             const naam = document.getElementById('dev_naam').value.trim();
