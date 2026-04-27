@@ -89,13 +89,15 @@ class AdminApp {
     setTab(tab) {
         this.currentTab = tab;
         
-        ['kamers', 'reservaties', 'leerlingen', 'instellingen', 'bestemmingen'].forEach(t => {
+        // Nu met de 'export' string toegevoegd aan de lijst
+        ['kamers', 'reservaties', 'leerlingen', 'instellingen', 'bestemmingen', 'export'].forEach(t => {
             const contentEl = document.getElementById(`content-${t}`);
             if(contentEl) contentEl.classList.add('hidden');
             
             const navBtn = document.getElementById(`nav-${t}`);
             if(navBtn) {
-                navBtn.classList.remove('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500');
+                // Verwijder oranje of groene selectie kleuren
+                navBtn.classList.remove('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500', 'text-green-600', 'bg-green-50', 'border-green-500');
                 navBtn.classList.add('text-gray-600');
             }
         });
@@ -106,13 +108,19 @@ class AdminApp {
         const activeNav = document.getElementById(`nav-${tab}`);
         if(activeNav) {
             activeNav.classList.remove('text-gray-600');
-            activeNav.classList.add('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500');
+            
+            // Geef export knop een groene stijl, de rest oranje
+            if (tab === 'export') {
+                activeNav.classList.add('text-green-600', 'bg-green-50', 'border-l-4', 'border-green-500');
+            } else {
+                activeNav.classList.add('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500');
+            }
         }
 
         this.refreshCurrentTab();
     }
 
-    // --- NIEUW: CSV EXPORT LOGICA ---
+    // --- CSV EXPORT LOGICA ---
     async exportKamersCSV() {
         const kamers = await window.dbApi.getAllKamersAdmin();
         if (!kamers || kamers.length === 0) {
