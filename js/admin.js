@@ -10,14 +10,26 @@ class AdminApp {
         }
 
         this.currentTab = 'kamers';
+        this.hotels = [];
         this.init();
     }
 
-    init() {
+    async init() {
         document.getElementById('userInfo').innerText = `Admin: ${this.user.vnaam} ${this.user.naam}`;
+        
+        // Dynamische teksten inladen
+        const settings = await window.dbApi.getAppSettings();
+        if (settings.app_title) {
+            if (document.getElementById('navTitle')) document.getElementById('navTitle').innerText = settings.app_title + " Admin";
+            if (document.getElementById('pageTitle')) document.title = settings.app_title + " Admin";
+        }
+
+        // Hotels ophalen voor de dropdown en tabellen
+        this.hotels = await window.dbApi.getHotels();
+        this.populateHotelDropdown();
+
         this.setTab('kamers');
 
-        // Event listeners
         document.getElementById('addKamerForm').addEventListener('submit', (e) => {
             e.preventDefault();
             this.addKamer();
@@ -33,78 +45,72 @@ class AdminApp {
             this.changePassword();
         });
 
-        // Supabase Realtime: Live updates voor het admin paneel
         const client = window.dbApi.supabaseClient;
-
         client.channel('admin_realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'reservering' }, () => {
-                console.log('⚡ [LIVE] Reservering gewijzigd');
-                this.refreshCurrentTab();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'persoon' }, () => {
-                console.log('⚡ [LIVE] Persoon gewijzigd');
-                this.refreshCurrentTab();
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'kamer' }, () => {
-                console.log('⚡ [LIVE] Kamer gewijzigd');
-                this.refreshCurrentTab();
-            })
-            .subscribe((status) => {
-                console.log('🔌 Admin Realtime status:', status);
-            });
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'reservering' }, () => this.refreshCurrentTab())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'persoon' }, () => this.refreshCurrentTab())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'kamer' }, () => this.refreshCurrentTab())
+            .subscribe();
 
-        // Fallback: ververs automatisch elke 3 seconden (voor als Realtime niet werkt)
         setInterval(() => {
             this.refreshCurrentTab();
         }, 3000);
     }
 
-    // Ververs de data van de tab die nu open staat (zonder tab te wisselen)
+    populateHotelDropdown() {
+        const select = document.getElementById('k_hotel');
+        if(!select) return;
+        select.innerHTML = '';
+        this.hotels.forEach(h => {
+            const opt = document.createElement('option');
+            opt.value = h.id;
+            opt.innerText = h.naam;
+            select.appendChild(opt);
+        });
+    }
+
     refreshCurrentTab() {
         if (this.currentTab === 'kamers') this.renderKamers();
         if (this.currentTab === 'reservaties') this.renderReservaties();
         if (this.currentTab === 'leerlingen') this.renderLeerlingen();
-        // instellingen hoeft niet te refreshen
     }
 
     setTab(tab) {
         this.currentTab = tab;
         
-        // Hide all
         ['kamers', 'reservaties', 'leerlingen', 'instellingen'].forEach(t => {
             document.getElementById(`content-${t}`).classList.add('hidden');
-            
             const navBtn = document.getElementById(`nav-${t}`);
             navBtn.classList.remove('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500');
             navBtn.classList.add('text-gray-600');
         });
 
-        // Show active
         document.getElementById(`content-${tab}`).classList.remove('hidden');
         
         const activeNav = document.getElementById(`nav-${tab}`);
         activeNav.classList.remove('text-gray-600');
         activeNav.classList.add('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500');
 
-        // Render content
         if (tab === 'kamers') this.renderKamers();
         if (tab === 'reservaties') this.renderReservaties();
         if (tab === 'leerlingen') this.renderLeerlingen();
     }
 
-    // --- KAMERS MODULE ---
     async renderKamers() {
         const tbody = document.getElementById('kamersTableBody');
         const kamers = await window.dbApi.getAllKamersAdmin();
         tbody.innerHTML = '';
 
         kamers.forEach(k => {
+            const hInfo = this.hotels.find(x => x.id === k.hotelid);
+            const hotelNaam = hInfo ? hInfo.naam : 'Onbekend';
+
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50';
             tr.innerHTML = `
                 <td class="p-3 text-gray-500">#${k.id}</td>
                 <td class="p-3 font-medium">${k.kamer_nr}</td>
-                <td class="p-3">${k.hotelid === 1 ? 'Como' : 'Montecatini'}</td>
+                <td class="p-3">${hotelNaam}</td>
                 <td class="p-3">${k.geslacht === 'M' ? 'Jongens' : 'Meisjes'}</td>
                 <td class="p-3">${k.capaciteit} (Bezet: ${k.bezet})</td>
                 <td class="p-3">
@@ -164,7 +170,6 @@ class AdminApp {
         }
     }
 
-    // --- RESERVATIES MODULE ---
     async renderReservaties() {
         const grid = document.getElementById('resGrid');
         const kamers = await window.dbApi.getAllKamersAdmin();
@@ -178,12 +183,15 @@ class AdminApp {
         }
 
         bezetteKamers.forEach(k => {
+            const hInfo = this.hotels.find(x => x.id === k.hotelid);
+            const hotelNaam = hInfo ? hInfo.naam : 'Onbekend';
+
             const card = document.createElement('div');
             card.className = 'border border-gray-200 rounded-lg p-4 bg-white shadow-sm';
             
             let html = `
                 <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h4 class="font-bold">Kamer ${k.kamer_nr} <span class="text-xs font-normal text-gray-500 ml-2">(${k.hotelid === 1 ? 'Como' : 'Montecatini'} - ${k.geslacht})</span></h4>
+                    <h4 class="font-bold">Kamer ${k.kamer_nr} <span class="text-xs font-normal text-gray-500 ml-2">(${hotelNaam} - ${k.geslacht})</span></h4>
                     <span class="text-xs font-semibold px-2 py-1 bg-gray-100 rounded">${k.bezet}/${k.capaciteit}</span>
                 </div>
                 <ul class="space-y-2">
@@ -218,33 +226,27 @@ class AdminApp {
         }
     }
 
-    // --- LEERLINGEN MODULE ---
     async renderLeerlingen() {
         const tbody = document.getElementById('leerlingenTableBody');
         const leerlingen = await window.dbApi.getAllLeerlingen();
-        
-        // Let op: In supabase moeten we misschien via join de reserveringen ophalen
-        // Voor het admin paneel halen we even alle reserveringen apart op
         const { data: alleReservaties } = await window.dbApi.supabaseClient.from('reservering').select('*');
         
         tbody.innerHTML = '';
-
-        // Sorteer op naam
         leerlingen.sort((a, b) => a.naam.localeCompare(b.naam));
 
         leerlingen.forEach(l => {
             const userRes = (alleReservaties || []).filter(r => r.persoon_id === l.id && r.status === 'confirmed');
             let statusHtml;
             if (userRes.length >= 2) {
-                statusHtml = `<span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded font-medium">Beide hotels</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded font-medium">Volledig in orde</span>`;
             } else if (userRes.length === 1) {
-                statusHtml = `<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-medium">1 hotel</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-medium">1 reservatie</span>`;
             } else {
                 statusHtml = `<span class="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded font-medium">Nog niet</span>`;
             }
             const hasRes = userRes.length > 0;
 
-            const geslachtTxt = l.geslacht ? (l.geslacht === 'M' ? 'Jongen' : 'Meisje') : '<span class="text-gray-400 italic text-xs">Onbekend (via login)</span>';
+            const geslachtTxt = l.geslacht ? (l.geslacht === 'M' ? 'Jongen' : 'Meisje') : '<span class="text-gray-400 italic text-xs">Onbekend</span>';
             const klasTxt = l.klas || '-';
             const rolTxt = l.rol === 'LK' ? '<span class="text-purple-600 font-semibold text-xs bg-purple-50 px-2 py-1 rounded">Leerkracht</span>' : '<span class="text-blue-600 font-medium text-xs">Leerling</span>';
 
@@ -278,7 +280,7 @@ class AdminApp {
             const res = await window.dbApi.importCSVLeerlingen(text);
             if (res.success) {
                 this.showAlert(`Succes! ${res.count} personen geïmporteerd.`, "success");
-                fileInput.value = ''; // reset
+                fileInput.value = ''; 
                 this.renderLeerlingen();
             } else {
                 this.showAlert(res.message, "error");
@@ -310,29 +312,20 @@ class AdminApp {
         }
     }
 
-    // --- INSTELLINGEN MODULE ---
     async changePassword() {
         const oldPw = document.getElementById('pw_old').value;
         const newPw = document.getElementById('pw_new').value;
         const confirmPw = document.getElementById('pw_confirm').value;
 
-        if (newPw !== confirmPw) {
-            this.showAlert('Nieuwe wachtwoorden komen niet overeen.', 'error');
-            return;
-        }
-
-        if (newPw.length < 6) {
-            this.showAlert('Het nieuwe wachtwoord moet minstens 6 tekens lang zijn.', 'error');
-            return;
-        }
+        if (newPw !== confirmPw) return this.showAlert('Nieuwe wachtwoorden komen niet overeen.', 'error');
+        if (newPw.length < 6) return this.showAlert('Minimaal 6 tekens.', 'error');
 
         const success = await window.dbApi.updateTeacherPassword(oldPw, newPw);
-
         if (success) {
-            this.showAlert('Leerkracht-wachtwoord succesvol gewijzigd!', 'success');
+            this.showAlert('Wachtwoord succesvol gewijzigd!', 'success');
             document.getElementById('changePasswordForm').reset();
         } else {
-            this.showAlert('Het huidige wachtwoord is onjuist.', 'error');
+            this.showAlert('Huidig wachtwoord is onjuist.', 'error');
         }
     }
 
@@ -352,7 +345,7 @@ class AdminApp {
 
         setTimeout(() => {
             box.classList.add('hidden');
-            box.className = 'hidden mb-6 p-4 rounded-xl border'; // reset
+            box.className = 'hidden mb-6 p-4 rounded-xl border'; 
         }, 3000);
     }
 }
