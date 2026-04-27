@@ -8,14 +8,14 @@ class App {
             return;
         }
 
-        this.currentHotelId = 1;
+        this.hotels = [];
+        this.currentHotelId = null;
         this.roommateSearchQuery = {};
         this.selectedRoommates = {};
 
-        // TIMER STATE
         this._lockStartServerMs = null;
         this._timerActive = false;
-        this._localStartTime = null; // NIEUW: Houdt lokaal de starttijd bij voor een stabiele klok
+        this._localStartTime = null; 
 
         this.init();
     }
@@ -26,39 +26,44 @@ class App {
         await window.dbApi.initializeDB();
         await window.dbApi.syncServerTime();
 
-        this.render(true); // Forceer de allereerste render
+        // Dynamische teksten inladen
+        const settings = await window.dbApi.getAppSettings();
+        if (settings.app_title) {
+            if (document.getElementById('navTitle')) document.getElementById('navTitle').innerText = settings.app_title;
+            if (document.getElementById('pageTitle')) document.title = settings.app_title;
+        }
 
-        // Realtime WebSockets
+        // Hotels ophalen uit database
+        this.hotels = await window.dbApi.getHotels();
+        if (this.hotels.length > 0) {
+            this.currentHotelId = this.hotels[0].id;
+        }
+
+        this.renderTabs();
+        this.setHotel(this.currentHotelId);
+
         const channel = window.dbApi.supabaseClient
             .channel('realtime_reserveringen')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'reservering' }, payload => {
-                console.log('⚡ LIVE update ontvangen:', payload);
-                this.render(); // Zachte render (wordt genegeerd als je typt)
+                this.render(); 
             })
-            .subscribe((status) => {
-                console.log('🔌 Realtime status:', status);
-            });
+            .subscribe();
 
-        // Fallback: ververs data elke 5 seconden
         setInterval(async () => {
             await window.dbApi.checkTimeouts();
-            this.render(); // Zachte render (wordt genegeerd als je typt)
+            this.render(); 
         }, 5000);
 
-        // Timer tikt elke seconde (ONAFHANKELIJK van render)
         setInterval(() => {
             this._tickTimer();
         }, 1000);
     }
 
-    // ─── TIMER LOGICA (robuust, lokaal) ───
-
     _startTimer(serverTimestamp) {
         if (this._timerActive) return; 
         this._lockStartServerMs = serverTimestamp;
-        this._localStartTime = Date.now(); // Start de klok op DIT moment op DIT apparaat
+        this._localStartTime = Date.now(); 
         this._timerActive = true;
-        console.log('⏱️ Lokale timer gestart');
     }
 
     _stopTimer() {
@@ -69,7 +74,6 @@ class App {
 
     _getRemaining() {
         if (!this._timerActive || !this._localStartTime) return -1;
-        // Simpelweg: huidige tijd - starttijd = verlopen tijd.
         const elapsed = Math.floor((Date.now() - this._localStartTime) / 1000);
         return Math.max(0, 60 - elapsed);
     }
@@ -88,46 +92,55 @@ class App {
             }
         }
 
-        // Auto-annuleer bij 0 (op het scherm, database heeft nu 90 seconden marge)
         if (remaining <= 0) {
-            console.log('⏱️ Timer verlopen, auto-annuleer');
             this._stopTimer();
             this.annuleer();
         }
     }
 
-    // ─── HOTEL TABS ───
-
-    setHotel(hotelId) {
-        this.currentHotelId = hotelId;
-
-        if (hotelId === 1) {
-            document.body.style.backgroundImage = "url('b70426ffce14d5cb756f48dbb7b7c77965c19194f27cdad21906f39bbb9d.webp')";
-        } else {
-            document.body.style.backgroundImage = "url('DSC_0042.jpg')";
-        }
-
-        document.getElementById('tab-1').className = hotelId === 1
-            ? "px-6 py-2 rounded-lg font-medium text-sm transition shadow-sm bg-white text-gray-800"
-            : "px-6 py-2 rounded-lg font-medium text-sm transition text-gray-600 hover:text-gray-800";
-
-        document.getElementById('tab-2').className = hotelId === 2
-            ? "px-6 py-2 rounded-lg font-medium text-sm transition shadow-sm bg-white text-gray-800"
-            : "px-6 py-2 rounded-lg font-medium text-sm transition text-gray-600 hover:text-gray-800";
-
-        this.render(true); // Forceer render bij wisselen van tabblad
+    renderTabs() {
+        const container = document.getElementById('tabsContainer');
+        if (!container) return;
+        container.innerHTML = '';
+        
+        this.hotels.forEach(h => {
+            const btn = document.createElement('button');
+            btn.id = `tab-${h.id}`;
+            btn.innerText = h.naam;
+            btn.onclick = () => this.setHotel(h.id);
+            container.appendChild(btn);
+        });
     }
 
-    // ─── MAIN RENDER ───
+    updateTabStyles() {
+        this.hotels.forEach(h => {
+            const btn = document.getElementById(`tab-${h.id}`);
+            if (btn) {
+                if (h.id === this.currentHotelId) {
+                    btn.className = "px-6 py-2 rounded-lg font-medium text-sm transition shadow-sm bg-white text-gray-800";
+                } else {
+                    btn.className = "px-6 py-2 rounded-lg font-medium text-sm transition text-gray-600 hover:text-gray-800";
+                }
+            }
+        });
+    }
+
+    setHotel(hotelId) {
+        if (!hotelId) return;
+        this.currentHotelId = hotelId;
+        
+        const hotel = this.hotels.find(h => h.id === hotelId);
+        if (hotel && hotel.bg_image) {
+            document.body.style.backgroundImage = `url('${hotel.bg_image}')`;
+        }
+
+        this.updateTabStyles();
+        this.render(true); 
+    }
 
     async render(force = false) {
-        // Controleer of de gebruiker aan het typen is
         const isTyping = document.activeElement && document.activeElement.tagName === 'INPUT';
-        
-        // Als de gebruiker typt, en het is geen verplichte (force) update, stop dan met renderen!
-        if (isTyping && !force) {
-            return;
-        }
+        if (isTyping && !force) return;
 
         const overlay = document.getElementById('cardOverlay');
         const container = document.getElementById('kamersContainer');
@@ -159,9 +172,7 @@ class App {
             this.selectedRoommates = {};
         }
 
-        // We bewaren de focus voor de zekerheid
         const activeElementId = document.activeElement ? document.activeElement.id : null;
-
         container.innerHTML = '';
 
         kamers.forEach(kamer => {
@@ -169,6 +180,10 @@ class App {
             const isUserRoom = userRes && userRes.kamerid === kamer.id;
             const isThisPending = isUserRoom && userRes.status === 'pending';
             const lockedByOther = kamer.isLocked && !isUserRoom;
+
+            // Zoek hotelnaam dynamisch
+            const hInfo = this.hotels.find(x => x.id === kamer.hotelid);
+            const hotelNaam = hInfo ? hInfo.naam : 'Onbekend';
 
             let cardClasses = `kamer-card bg-white rounded-2xl p-5 border border-gray-200 relative overflow-visible `;
 
@@ -207,7 +222,7 @@ class App {
                         <h3 class="text-xl font-extrabold text-gray-800 tracking-tight">Kamer ${kamer.kamer_nr}</h3>
                         <p class="text-xs text-gray-400 mt-1 uppercase tracking-wider font-semibold flex items-center gap-1">
                             <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path></svg>
-                            ${kamer.hotelid === 1 ? 'Como' : 'Montecatini'}
+                            ${hotelNaam}
                         </p>
                     </div>
                     ${timerHtml || `<span class="text-sm font-bold px-3 py-1 rounded-full ${isFull ? 'bg-red-50 text-red-600' : lockedByOther ? 'bg-orange-50 text-orange-600' : 'bg-orange-50 text-orange-600'} shadow-sm">
@@ -220,7 +235,6 @@ class App {
             `;
 
             let lijstHtml = '<ul class="space-y-3 mb-6 min-h-[80px] relative">';
-
             kamer.reservaties.forEach(r => {
                 const isMe = r.gebruiker.id === this.user.id;
                 let statusBadge = r.status === 'confirmed' ? '<svg class="w-4 h-4 text-green-500 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>' : '';
@@ -316,7 +330,6 @@ class App {
             container.appendChild(card);
         });
 
-        // Herstel de focus als we klaar zijn met tekenen
         if (activeElementId) {
             const el = document.getElementById(activeElementId);
             if (el) {
@@ -327,8 +340,6 @@ class App {
             }
         }
     }
-
-    // ─── SEARCH & ROOMMATES ───
 
     async handleSearch(event, slotIndex) {
         const query = event.target.value;
@@ -373,15 +384,13 @@ class App {
     selectRoommate(slotIndex, id, vnaam, naam) {
         this.selectedRoommates[slotIndex] = { id, vnaam, naam };
         this.roommateSearchQuery[slotIndex] = '';
-        this.render(true); // Verplichte render omdat de status van de kamer is gewijzigd
+        this.render(true); 
     }
 
     removeRoommate(slotIndex) {
         delete this.selectedRoommates[slotIndex];
-        this.render(true); // Verplichte render omdat de status is gewijzigd
+        this.render(true); 
     }
-
-    // ─── ACTIES ───
 
     async join(kamerId) {
         const res = await window.dbApi.reserveerPlek(kamerId, this.user.id);
@@ -389,7 +398,7 @@ class App {
             if (res.server_ts) {
                 this._startTimer(res.server_ts);
             }
-            this.render(true); // Verplichte render om de popup te tonen
+            this.render(true); 
         } else {
             this.showAlert(res.message, "error");
         }
@@ -397,19 +406,21 @@ class App {
 
     async bevestig() {
         const roommateIds = Object.values(this.selectedRoommates).map(rm => rm.id);
-
         const res = await window.dbApi.bevestigReservatie(this.user.id, roommateIds);
+        
         if (res.success) {
             this._stopTimer();
             this.roommateSearchQuery = {};
             this.selectedRoommates = {};
 
-            const nextHotelId = this.currentHotelId === 1 ? 2 : 1;
-            this.setHotel(nextHotelId);
+            // Spring naar het volgende tabblad als er één is
+            const currentIndex = this.hotels.findIndex(h => h.id === this.currentHotelId);
+            if (currentIndex >= 0 && currentIndex < this.hotels.length - 1) {
+                this.setHotel(this.hotels[currentIndex + 1].id);
+            }
             
-            // Controleer of er iemand net op het nippertje "gekaapt" werd door een andere leerling
             if (res.message && res.message.includes('veilig!')) {
-                this.showAlert(res.message, "error"); // Oranje/Rode alert om te waarschuwen
+                this.showAlert(res.message, "error"); 
             } else {
                 this.showAlert("Opgeslagen! Controleer je kamers.", "success");
             }
@@ -424,7 +435,7 @@ class App {
         await window.dbApi.annuleerPending(this.user.id);
         this.roommateSearchQuery = {};
         this.selectedRoommates = {};
-        this.render(true); // Verplichte render om de popup te sluiten
+        this.render(true); 
     }
 
     logout() {
