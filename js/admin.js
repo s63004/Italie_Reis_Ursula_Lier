@@ -112,6 +112,46 @@ class AdminApp {
         this.refreshCurrentTab();
     }
 
+    // --- NIEUW: CSV EXPORT LOGICA ---
+    async exportKamersCSV() {
+        const kamers = await window.dbApi.getAllKamersAdmin();
+        if (!kamers || kamers.length === 0) {
+            this.showAlert("Er zijn geen kamers om te exporteren.", "error");
+            return;
+        }
+
+        // CSV Headers
+        let csvContent = "Kamer Nummer;Bestemming;Geslacht;Capaciteit;Bezet;Vrij;Namen Leerlingen\n";
+
+        kamers.forEach(k => {
+            const hInfo = this.hotels.find(x => x.id === k.hotelid);
+            const hotelNaam = hInfo ? hInfo.naam : 'Onbekend';
+            const geslacht = k.geslacht === 'M' ? 'Jongens' : 'Meisjes';
+            const vrij = k.capaciteit - k.bezet;
+            
+            // Haal de namen op van de reservaties, voeg ze samen met een komma
+            const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : 'Onbekend').join(', ');
+            
+            // We doen de namen tussen aanhalingstekens (") zodat Excel niet per ongeluk een extra kolom maakt bij een komma
+            const escapedNamen = `"${namen}"`;
+            
+            csvContent += `${k.kamer_nr};${hotelNaam};${geslacht};${k.capaciteit};${k.bezet};${vrij};${escapedNamen}\n`;
+        });
+
+        // Maak een "Blob" (bestand) aan en start de download
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); // \uFEFF zorgt dat Excel speciale tekens goed pakt
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "kamerverdeling_export.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        this.showAlert("CSV Export succesvol gedownload!", "success");
+    }
+
     // --- BESTEMMINGEN LOGICA ---
     async renderBestemmingen() {
         const tbody = document.getElementById('bestemmingenTableBody');
