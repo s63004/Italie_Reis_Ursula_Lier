@@ -13,6 +13,7 @@ class App {
         this.roommateSearchQuery = {};
         this.selectedRoommates = {};
 
+        // TIMER STATE
         this._lockStartServerMs = null;
         this._timerActive = false;
         this._localStartTime = null; 
@@ -33,8 +34,8 @@ class App {
             if (document.getElementById('pageTitle')) document.title = settings.app_title;
         }
 
-        // Hotels ophalen uit database
-        this.hotels = await window.dbApi.getHotels();
+        // Hotels ophalen uit database (enkel de actieve)
+        this.hotels = await window.dbApi.getHotels(true);
         if (this.hotels.length > 0) {
             this.currentHotelId = this.hotels[0].id;
         }
@@ -42,6 +43,7 @@ class App {
         this.renderTabs();
         this.setHotel(this.currentHotelId);
 
+        // Realtime WebSockets
         const channel = window.dbApi.supabaseClient
             .channel('realtime_reserveringen')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'reservering' }, payload => {
@@ -49,11 +51,13 @@ class App {
             })
             .subscribe();
 
+        // Fallback: ververs data elke 5 seconden
         setInterval(async () => {
             await window.dbApi.checkTimeouts();
             this.render(); 
         }, 5000);
 
+        // Timer tikt elke seconde
         setInterval(() => {
             this._tickTimer();
         }, 1000);
@@ -141,6 +145,8 @@ class App {
     async render(force = false) {
         const isTyping = document.activeElement && document.activeElement.tagName === 'INPUT';
         if (isTyping && !force) return;
+
+        if (!this.currentHotelId) return; // Wacht tot hotelId geladen is
 
         const overlay = document.getElementById('cardOverlay');
         const container = document.getElementById('kamersContainer');
