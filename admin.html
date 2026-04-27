@@ -19,7 +19,7 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
-                    <span id="navTitle" class="text-xl font-bold text-orange-500">Admin Paneel</span>
+                    <span id="navTitle" class="text-xl font-bold text-orange-500">Laden...</span>
                 </div>
                 <div class="flex items-center gap-4">
                     <div id="userInfo" class="font-medium text-gray-300"></div>
@@ -43,6 +43,9 @@
                     <button onclick="window.adminApp.setTab('leerlingen')" id="nav-leerlingen" class="px-6 py-4 text-left font-semibold text-gray-600 hover:bg-gray-50 border-b border-gray-100 transition">
                         👩‍🎓 Leerlingenlijst
                     </button>
+                    <button onclick="window.adminApp.setTab('bestemmingen')" id="nav-bestemmingen" class="px-6 py-4 text-left font-semibold text-gray-600 hover:bg-gray-50 border-b border-gray-100 transition">
+                        🗺️ Bestemmingen
+                    </button>
                     <button onclick="window.adminApp.setTab('instellingen')" id="nav-instellingen" class="px-6 py-4 text-left font-semibold text-gray-600 hover:bg-gray-50 transition">
                         ⚙️ Instellingen
                     </button>
@@ -61,17 +64,17 @@
                     <h3 class="font-semibold mb-3">Nieuwe Kamer Toevoegen</h3>
                     <form id="addKamerForm" class="flex gap-4 items-end flex-wrap">
                         <div>
-                            <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Hotel</label>
-                            <select id="k_hotel" class="border p-2 rounded w-32">
+                            <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Hotel / Bestemming</label>
+                            <select id="k_hotel" class="border p-2 rounded w-32 bg-white">
                                 </select>
                         </div>
                         <div>
                             <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Nummer</label>
-                            <input type="text" id="k_nr" placeholder="Bv. C-M-1" class="border p-2 rounded w-32" required>
+                            <input type="text" id="k_nr" placeholder="Bv. 101" class="border p-2 rounded w-32" required>
                         </div>
                         <div>
                             <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Geslacht</label>
-                            <select id="k_geslacht" class="border p-2 rounded w-32">
+                            <select id="k_geslacht" class="border p-2 rounded w-32 bg-white">
                                 <option value="M">Jongens</option>
                                 <option value="V">Meisjes</option>
                             </select>
@@ -90,7 +93,7 @@
                             <tr class="bg-gray-100 text-gray-600 text-sm">
                                 <th class="p-3 border-b">ID</th>
                                 <th class="p-3 border-b">Kamer Nr</th>
-                                <th class="p-3 border-b">Hotel</th>
+                                <th class="p-3 border-b">Hotel/Bestemming</th>
                                 <th class="p-3 border-b">Geslacht</th>
                                 <th class="p-3 border-b">Capaciteit</th>
                                 <th class="p-3 border-b">Acties</th>
@@ -106,35 +109,6 @@
                 <p class="text-sm text-gray-500 mb-6">Hier zie je een overzicht van alle bezette bedden. Je kan een leerling "kicken" (reservatie annuleren). De leerling kan dan opnieuw een kamer kiezen op het normale dashboard.</p>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6" id="resGrid">
                     </div>
-            </div>
-
-            <div id="content-instellingen" class="hidden">
-                <h2 class="text-2xl font-bold mb-6 border-b pb-2">Instellingen</h2>
-
-                <div class="max-w-md">
-                    <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
-                        <h3 class="font-semibold mb-1 flex items-center gap-2">
-                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                            Leerkracht Wachtwoord Wijzigen
-                        </h3>
-                        <p class="text-xs text-gray-500 mb-4">Dit wachtwoord wordt gevraagd wanneer iemand zich als leerkracht aanmeldt.</p>
-                        <form id="changePasswordForm" class="space-y-4">
-                            <div>
-                                <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Huidig Wachtwoord</label>
-                                <input type="password" id="pw_old" class="w-full border p-2 rounded" required>
-                            </div>
-                            <div>
-                                <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Nieuw Wachtwoord</label>
-                                <input type="password" id="pw_new" class="w-full border p-2 rounded" required minlength="6">
-                            </div>
-                            <div>
-                                <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Bevestig Nieuw Wachtwoord</label>
-                                <input type="password" id="pw_confirm" class="w-full border p-2 rounded" required minlength="6">
-                            </div>
-                            <button type="submit" class="w-full bg-gray-900 text-white px-4 py-2 rounded hover:bg-gray-800 transition font-medium">Wachtwoord Wijzigen</button>
-                        </form>
-                    </div>
-                </div>
             </div>
 
             <div id="content-leerlingen" class="hidden">
@@ -157,7 +131,7 @@
                             <div class="flex gap-3 items-end">
                                 <div class="flex-1">
                                     <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Geslacht</label>
-                                    <select id="l_geslacht" class="w-full border p-2 rounded">
+                                    <select id="l_geslacht" class="w-full border p-2 rounded bg-white">
                                         <option value="M">Jongen</option>
                                         <option value="V">Meisje</option>
                                     </select>
@@ -194,6 +168,70 @@
                 </div>
             </div>
 
+            <div id="content-bestemmingen" class="hidden">
+                <h2 class="text-2xl font-bold mb-6 border-b pb-2">Bestemmingen Beheren</h2>
+                
+                <p class="text-sm text-gray-500 mb-6">Voeg hier nieuwe hotels of reizen toe. Met het vinkje bepaal je of leerlingen deze reis al kunnen zien in hun dashboard of niet. Handig om reizen alvast klaar te zetten!</p>
+
+                <div class="bg-gray-50 p-4 rounded-lg mb-8 border border-gray-200">
+                    <h3 class="font-semibold mb-3">Nieuwe Bestemming / Hotel Toevoegen</h3>
+                    <form id="addBestemmingForm" class="flex gap-4 items-end flex-wrap">
+                        <div>
+                            <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Naam (bv. Parijs)</label>
+                            <input type="text" id="b_naam" placeholder="Naam hotel of reis" class="border p-2 rounded w-48" required>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Achtergrondfoto (bestandsnaam)</label>
+                            <input type="text" id="b_foto" placeholder="bv. parijs.jpg" class="border p-2 rounded w-64" required>
+                        </div>
+                        <button type="submit" class="bg-gray-900 text-white px-4 py-2 rounded hover:bg-gray-800 transition">Toevoegen</button>
+                    </form>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100 text-gray-600 text-sm">
+                                <th class="p-3 border-b w-16">ID</th>
+                                <th class="p-3 border-b">Naam</th>
+                                <th class="p-3 border-b">Achtergrond</th>
+                                <th class="p-3 border-b text-center">Zichtbaar voor leerlingen?</th>
+                            </tr>
+                        </thead>
+                        <tbody id="bestemmingenTableBody" class="text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="content-instellingen" class="hidden">
+                <h2 class="text-2xl font-bold mb-6 border-b pb-2">Instellingen</h2>
+
+                <div class="max-w-md">
+                    <div class="bg-gray-50 p-6 rounded-lg border border-gray-200">
+                        <h3 class="font-semibold mb-1 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                            Leerkracht Wachtwoord Wijzigen
+                        </h3>
+                        <p class="text-xs text-gray-500 mb-4">Dit wachtwoord wordt gevraagd wanneer iemand zich als leerkracht aanmeldt op de Dev Login.</p>
+                        <form id="changePasswordForm" class="space-y-4">
+                            <div>
+                                <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Huidig Wachtwoord</label>
+                                <input type="password" id="pw_old" class="w-full border p-2 rounded" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Nieuw Wachtwoord</label>
+                                <input type="password" id="pw_new" class="w-full border p-2 rounded" required minlength="6">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Bevestig Nieuw Wachtwoord</label>
+                                <input type="password" id="pw_confirm" class="w-full border p-2 rounded" required minlength="6">
+                            </div>
+                            <button type="submit" class="w-full bg-gray-900 text-white px-4 py-2 rounded hover:bg-gray-800 transition font-medium">Wachtwoord Wijzigen</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
 
@@ -207,7 +245,7 @@
             </div>
             <div class="mb-4">
                 <label class="block text-sm font-medium mb-1">Geslacht</label>
-                <select id="edit_k_geslacht" class="w-full border p-2 rounded">
+                <select id="edit_k_geslacht" class="w-full border p-2 rounded bg-white">
                     <option value="M">Jongens</option>
                     <option value="V">Meisjes</option>
                 </select>
@@ -217,8 +255,8 @@
                 <input type="number" id="edit_k_cap" class="w-full border p-2 rounded">
             </div>
             <div class="flex justify-end gap-2">
-                <button onclick="document.getElementById('editKamerModal').classList.add('hidden')" class="px-4 py-2 bg-gray-100 rounded hover:bg-gray-200">Annuleren</button>
-                <button onclick="window.adminApp.saveKamerEdit()" class="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800">Opslaan</button>
+                <button onclick="document.getElementById('editKamerModal').classList.add('hidden')" class="px-4 py-2 bg-gray-100 rounded hover:bg-gray-200 transition">Annuleren</button>
+                <button onclick="window.adminApp.saveKamerEdit()" class="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition">Opslaan</button>
             </div>
         </div>
     </div>
