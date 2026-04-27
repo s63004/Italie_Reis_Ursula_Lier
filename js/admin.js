@@ -24,8 +24,8 @@ class AdminApp {
             if (document.getElementById('pageTitle')) document.title = settings.app_title + " Admin";
         }
 
-        // Hotels ophalen voor de dropdown en tabellen
-        this.hotels = await window.dbApi.getHotels();
+        // Hotels ophalen voor de dropdown en tabellen (haal ALLES op in admin, ook verborgen)
+        this.hotels = await window.dbApi.getHotels(false);
         this.populateHotelDropdown();
 
         this.setTab('kamers');
@@ -45,11 +45,21 @@ class AdminApp {
             this.changePassword();
         });
 
+        // Event listener voor bestemming toevoegen (beschermd tegen null if form not loaded)
+        const addBestemmingForm = document.getElementById('addBestemmingForm');
+        if (addBestemmingForm) {
+            addBestemmingForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.addBestemming();
+            });
+        }
+
         const client = window.dbApi.supabaseClient;
         client.channel('admin_realtime')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'reservering' }, () => this.refreshCurrentTab())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'persoon' }, () => this.refreshCurrentTab())
             .on('postgres_changes', { event: '*', schema: 'public', table: 'kamer' }, () => this.refreshCurrentTab())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'hotel' }, () => this.refreshCurrentTab())
             .subscribe();
 
         setInterval(() => {
@@ -73,31 +83,91 @@ class AdminApp {
         if (this.currentTab === 'kamers') this.renderKamers();
         if (this.currentTab === 'reservaties') this.renderReservaties();
         if (this.currentTab === 'leerlingen') this.renderLeerlingen();
+        if (this.currentTab === 'bestemmingen') this.renderBestemmingen();
     }
 
     setTab(tab) {
         this.currentTab = tab;
         
-        ['kamers', 'reservaties', 'leerlingen', 'instellingen'].forEach(t => {
-            document.getElementById(`content-${t}`).classList.add('hidden');
+        ['kamers', 'reservaties', 'leerlingen', 'instellingen', 'bestemmingen'].forEach(t => {
+            const contentEl = document.getElementById(`content-${t}`);
+            if(contentEl) contentEl.classList.add('hidden');
+            
             const navBtn = document.getElementById(`nav-${t}`);
-            navBtn.classList.remove('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500');
-            navBtn.classList.add('text-gray-600');
+            if(navBtn) {
+                navBtn.classList.remove('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500');
+                navBtn.classList.add('text-gray-600');
+            }
         });
 
-        document.getElementById(`content-${tab}`).classList.remove('hidden');
+        const activeContent = document.getElementById(`content-${tab}`);
+        if(activeContent) activeContent.classList.remove('hidden');
         
         const activeNav = document.getElementById(`nav-${tab}`);
-        activeNav.classList.remove('text-gray-600');
-        activeNav.classList.add('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500');
+        if(activeNav) {
+            activeNav.classList.remove('text-gray-600');
+            activeNav.classList.add('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500');
+        }
 
-        if (tab === 'kamers') this.renderKamers();
-        if (tab === 'reservaties') this.renderReservaties();
-        if (tab === 'leerlingen') this.renderLeerlingen();
+        this.refreshCurrentTab();
     }
 
+    // --- NIEUW: BESTEMMINGEN LOGICA ---
+    async renderBestemmingen() {
+        const tbody = document.getElementById('bestemmingenTableBody');
+        if (!tbody) return;
+        
+        const alleHotels = await window.dbApi.getHotels(false);
+        tbody.innerHTML = '';
+
+        alleHotels.forEach(h => {
+            const tr = document.createElement('tr');
+            tr.className = 'border-b hover:bg-gray-50';
+            
+            const checkedState = h.is_actief ? 'checked' : '';
+            
+            tr.innerHTML = `
+                <td class="p-3 text-gray-500">#${h.id}</td>
+                <td class="p-3 font-bold">${h.naam}</td>
+                <td class="p-3 text-gray-400 text-xs">${h.bg_image}</td>
+                <td class="p-3 text-center">
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" ${checkedState} onchange="window.adminApp.toggleBestemming(${h.id}, this.checked)" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                    </label>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async addBestemming() {
+        const naam = document.getElementById('b_naam').value;
+        const foto = document.getElementById('b_foto').value;
+
+        await window.dbApi.addHotel(naam, foto);
+        
+        this.hotels = await window.dbApi.getHotels(false);
+        this.populateHotelDropdown();
+        
+        this.showAlert("Bestemming toegevoegd! (Staat standaard onzichtbaar)", "success");
+        const form = document.getElementById('addBestemmingForm');
+        if(form) form.reset();
+        this.renderBestemmingen();
+    }
+
+    async toggleBestemming(id, isActief) {
+        await window.dbApi.toggleHotelActief(id, isActief);
+        this.showAlert(isActief ? "Bestemming is nu zichtbaar!" : "Bestemming verborgen.", "info");
+        
+        this.hotels = await window.dbApi.getHotels(false);
+        this.populateHotelDropdown();
+    }
+
+    // --- KAMERS LOGICA ---
     async renderKamers() {
         const tbody = document.getElementById('kamersTableBody');
+        if (!tbody) return;
         const kamers = await window.dbApi.getAllKamersAdmin();
         tbody.innerHTML = '';
 
@@ -170,8 +240,10 @@ class AdminApp {
         }
     }
 
+    // --- RESERVATIES LOGICA ---
     async renderReservaties() {
         const grid = document.getElementById('resGrid');
+        if(!grid) return;
         const kamers = await window.dbApi.getAllKamersAdmin();
         grid.innerHTML = '';
 
@@ -226,8 +298,10 @@ class AdminApp {
         }
     }
 
+    // --- LEERLINGEN LOGICA ---
     async renderLeerlingen() {
         const tbody = document.getElementById('leerlingenTableBody');
+        if(!tbody) return;
         const leerlingen = await window.dbApi.getAllLeerlingen();
         const { data: alleReservaties } = await window.dbApi.supabaseClient.from('reservering').select('*');
         
@@ -248,7 +322,7 @@ class AdminApp {
 
             const geslachtTxt = l.geslacht ? (l.geslacht === 'M' ? 'Jongen' : 'Meisje') : '<span class="text-gray-400 italic text-xs">Onbekend</span>';
             const klasTxt = l.klas || '-';
-            const rolTxt = l.rol === 'LK' ? '<span class="text-purple-600 font-semibold text-xs bg-purple-50 px-2 py-1 rounded">Leerkracht</span>' : '<span class="text-blue-600 font-medium text-xs">Leerling</span>';
+            const rolTxt = l.rol === 'LEERKRACHT' || l.rol === 'LK' ? '<span class="text-purple-600 font-semibold text-xs bg-purple-50 px-2 py-1 rounded">Leerkracht</span>' : '<span class="text-blue-600 font-medium text-xs">Leerling</span>';
 
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50';
@@ -312,6 +386,7 @@ class AdminApp {
         }
     }
 
+    // --- INSTELLINGEN LOGICA ---
     async changePassword() {
         const oldPw = document.getElementById('pw_old').value;
         const newPw = document.getElementById('pw_new').value;
@@ -336,6 +411,7 @@ class AdminApp {
 
     showAlert(msg, type) {
         const box = document.getElementById('alertBox');
+        if(!box) return;
         box.innerText = msg;
         box.className = 'mb-6 p-4 rounded-xl border block transition-opacity font-medium shadow-sm';
         
