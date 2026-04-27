@@ -66,7 +66,14 @@ async function getHotels(onlyActive = false) {
 async function addHotel(naam, bg_image) {
     await supabaseClient.from('hotel').insert([{ naam, bg_image, is_actief: false }]);
     const u = getCurrentUser();
-    await writeLog('ADMIN_ADD_HOTEL', u.id, `Bestemming ${naam} toegevoegd`);
+    await writeLog('ADMIN_ADD_HOTEL', u.id, `Bestemming ${naam} toegevoegd met foto ${bg_image}`);
+    return { success: true };
+}
+
+async function updateHotel(id, naam, bg_image) {
+    await supabaseClient.from('hotel').update({ naam, bg_image }).eq('id', id);
+    const u = getCurrentUser();
+    await writeLog('ADMIN_UPDATE_HOTEL', u.id, `Bestemming ${id} aangepast`);
     return { success: true };
 }
 
@@ -370,5 +377,5 @@ window.dbApi = {
     syncServerTime, getEstimatedServerTime, verifyTeacherPassword, updateTeacherPassword,
     getAllKamersAdmin, addKamer, updateKamer, deleteKamer, removeReservatieAdmin,
     getAllLeerlingen, addLeerling, deleteLeerling, importCSVLeerlingen,
-    getAppSettings, getHotels, addHotel, toggleHotelActief, supabaseClient
+    getAppSettings, getHotels, addHotel, updateHotel, toggleHotelActief, supabaseClient
 };
