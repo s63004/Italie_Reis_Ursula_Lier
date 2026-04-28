@@ -9,8 +9,9 @@ class AdminApp {
             return;
         }
 
-        this.currentTab = 'kamers';
+        this.currentTab = 'reizen'; // Start nu standaard op reizen
         this.hotels = [];
+        this.reizen = []; // NIEUW: array voor reizen
         this.init();
     }
 
@@ -24,11 +25,25 @@ class AdminApp {
             if (document.getElementById('pageTitle')) document.title = settings.app_title + " Admin";
         }
 
+        // NIEUW: Reizen ophalen
+        this.reizen = await window.dbApi.getReizen(false);
+
         // Hotels ophalen voor de dropdown en tabellen (haal ALLES op in admin, ook verborgen)
         this.hotels = await window.dbApi.getHotels(false);
+        
+        this.populateReisDropdown(); // NIEUW
         this.populateHotelDropdown();
 
-        this.setTab('kamers');
+        this.setTab(this.currentTab);
+
+        // NIEUW: Event listener voor reis toevoegen
+        const addReisForm = document.getElementById('addReisForm');
+        if (addReisForm) {
+            addReisForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.addReis();
+            });
+        }
 
         document.getElementById('addKamerForm').addEventListener('submit', (e) => {
             e.preventDefault();
@@ -67,19 +82,34 @@ class AdminApp {
         }, 3000);
     }
 
+    // NIEUW: Reizen dropdown vullen
+    populateReisDropdown() {
+        const select = document.getElementById('b_reis');
+        if(!select) return;
+        select.innerHTML = '';
+        this.reizen.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.innerText = r.naam;
+            select.appendChild(opt);
+        });
+    }
+
     populateHotelDropdown() {
         const select = document.getElementById('k_hotel');
         if(!select) return;
         select.innerHTML = '';
         this.hotels.forEach(h => {
+            const reisNaam = h.reis ? h.reis.naam : 'Geen Reis'; // AANGEPAST
             const opt = document.createElement('option');
             opt.value = h.id;
-            opt.innerText = h.naam;
+            opt.innerText = `${h.naam} (${reisNaam})`; // AANGEPAST
             select.appendChild(opt);
         });
     }
 
     refreshCurrentTab() {
+        if (this.currentTab === 'reizen') this.renderReizen(); // NIEUW
         if (this.currentTab === 'kamers') this.renderKamers();
         if (this.currentTab === 'reservaties') this.renderReservaties();
         if (this.currentTab === 'leerlingen') this.renderLeerlingen();
@@ -89,8 +119,8 @@ class AdminApp {
     setTab(tab) {
         this.currentTab = tab;
         
-        // Nu met de 'export' string toegevoegd aan de lijst
-        ['kamers', 'reservaties', 'leerlingen', 'instellingen', 'bestemmingen', 'export'].forEach(t => {
+        // Nu met de 'reizen' string toegevoegd aan de lijst
+        ['reizen', 'kamers', 'reservaties', 'leerlingen', 'instellingen', 'bestemmingen', 'export'].forEach(t => {
             const contentEl = document.getElementById(`content-${t}`);
             if(contentEl) contentEl.classList.add('hidden');
             
@@ -118,6 +148,59 @@ class AdminApp {
         }
 
         this.refreshCurrentTab();
+    }
+
+    // --- NIEUW: REIZEN LOGICA ---
+    async renderReizen() {
+        const tbody = document.getElementById('reizenTableBody');
+        if (!tbody) return;
+        
+        this.reizen = await window.dbApi.getReizen(false);
+        tbody.innerHTML = '';
+
+        this.reizen.forEach(r => {
+            const tr = document.createElement('tr');
+            tr.className = 'border-b hover:bg-gray-50 transition';
+            const checkedState = r.is_actief ? 'checked' : '';
+            
+            tr.innerHTML = `
+                <td class="p-3 text-gray-500">#${r.id}</td>
+                <td class="p-3 font-bold">${r.naam}</td>
+                <td class="p-3 text-gray-400 text-xs">${r.login_bg}</td>
+                <td class="p-3 text-center">
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" ${checkedState} onchange="window.adminApp.toggleReis(${r.id}, this.checked)" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500 shadow-sm"></div>
+                    </label>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async addReis() {
+        const naam = document.getElementById('r_naam').value;
+        const foto = document.getElementById('r_foto').value;
+        const res = await window.dbApi.addReis(naam, foto);
+        
+        if (res.success) {
+            this.showAlert("Reis toegevoegd!", "success");
+            document.getElementById('addReisForm').reset();
+            await this.init(); // Herlaad alles zodat dropdowns updaten
+        } else {
+            this.showAlert("Fout bij toevoegen.", "error");
+        }
+    }
+
+    async toggleReis(id, isActief) {
+        if (!isActief) {
+            this.showAlert("Er moet altijd een reis actief zijn om in te loggen.", "error");
+            this.renderReizen(); // Zet checkbox terug
+            return;
+        }
+        await window.dbApi.toggleReisActief(id, isActief);
+        this.showAlert("Actieve reis gewijzigd! Inlogscherm is geüpdatet.", "success");
+        this.renderReizen();
     }
 
     // --- CSV EXPORT LOGICA ---
@@ -173,9 +256,10 @@ class AdminApp {
             tr.className = 'border-b hover:bg-gray-50 transition';
             
             const checkedState = h.is_actief ? 'checked' : '';
+            const reisNaam = h.reis ? h.reis.naam : '<span class="text-red-500">Geen</span>'; // NIEUW
             
             tr.innerHTML = `
-                <td class="p-3 text-gray-500">#${h.id}</td>
+                <td class="p-3 text-xs font-bold text-gray-500">${reisNaam}</td>
                 <td class="p-3 font-bold">${h.naam}</td>
                 <td class="p-3 text-gray-400 text-xs">${h.bg_image}</td>
                 <td class="p-3 text-center">
@@ -190,10 +274,11 @@ class AdminApp {
     }
 
     async addBestemming() {
+        const reis_id = document.getElementById('b_reis').value; // NIEUW
         const naam = document.getElementById('b_naam').value;
         const foto = document.getElementById('b_foto').value;
 
-        const res = await window.dbApi.addHotel(naam, foto);
+        const res = await window.dbApi.addHotel(reis_id, naam, foto); // AANGEPAST
         
         if (res.success) {
             this.hotels = await window.dbApi.getHotels(false);
