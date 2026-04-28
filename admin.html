@@ -66,7 +66,7 @@
             <div id="content-reizen" class="hidden">
                 <h2 class="text-2xl font-bold mb-6 border-b pb-2">Hoofdreizen Beheren</h2>
                 
-                <p class="text-sm text-gray-500 mb-6">Maak hier de hoofd-reizen aan. Er kan er maar <strong>één tegelijk actief</strong> zijn. De actieve reis bepaalt de foto en titel op de inlogpagina.</p>
+                <p class="text-sm text-gray-500 mb-6">Maak hier de hoofd-reizen aan. Er kan er maar <strong>één tegelijk actief</strong> zijn. Kies een afbeelding vanaf je computer voor de inlogpagina.</p>
 
                 <div class="bg-gray-50 p-4 rounded-lg mb-8 border border-gray-200">
                     <h3 class="font-semibold mb-3">Nieuwe Reis Toevoegen</h3>
@@ -76,8 +76,8 @@
                             <input type="text" id="r_naam" placeholder="Naam reis" class="border p-2 rounded w-48 bg-white" required>
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Inlog Foto (bestandsnaam)</label>
-                            <input type="text" id="r_foto" placeholder="bv. rome.jpg" class="border p-2 rounded w-64 bg-white" required>
+                            <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Inlog Foto Uploaden</label>
+                            <input type="file" id="r_foto" accept="image/*" class="border p-1.5 rounded w-64 bg-white" required>
                         </div>
                         <button type="submit" class="bg-gray-900 text-white px-4 py-2 rounded hover:bg-gray-800 transition shadow-sm">Toevoegen</button>
                     </form>
@@ -101,7 +101,7 @@
             <div id="content-bestemmingen" class="hidden">
                 <h2 class="text-2xl font-bold mb-6 border-b pb-2">Hotels / Bestemmingen Beheren</h2>
                 
-                <p class="text-sm text-gray-500 mb-6">Koppel een hotel aan een hoofdreis. Vink aan of de leerlingen dit hotel al mogen zien in hun dashboard (per stuk zichtbaar te maken).</p>
+                <p class="text-sm text-gray-500 mb-6">Koppel een hotel aan een hoofdreis en upload een dashboardfoto vanaf je computer.</p>
 
                 <div class="bg-gray-50 p-4 rounded-lg mb-8 border border-gray-200">
                     <h3 class="font-semibold mb-3">Nieuw Hotel Toevoegen</h3>
@@ -115,8 +115,8 @@
                             <input type="text" id="b_naam" placeholder="Naam hotel" class="border p-2 rounded w-48 bg-white" required>
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Achtergrondfoto Dashboard</label>
-                            <input type="text" id="b_foto" placeholder="bv. parijs.jpg" class="border p-2 rounded w-56 bg-white" required>
+                            <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Dashboard Foto Uploaden</label>
+                            <input type="file" id="b_foto" accept="image/*" class="border p-1.5 rounded w-56 bg-white" required>
                         </div>
                         <button type="submit" class="bg-gray-900 text-white px-4 py-2 rounded hover:bg-gray-800 transition shadow-sm">Toevoegen</button>
                     </form>
