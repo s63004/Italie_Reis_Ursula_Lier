@@ -9,34 +9,29 @@ class AdminApp {
             return;
         }
 
-        this.currentTab = 'reizen'; // Start nu standaard op reizen
+        this.currentTab = 'reizen'; 
         this.hotels = [];
-        this.reizen = []; // NIEUW: array voor reizen
+        this.reizen = []; 
         this.init();
     }
 
     async init() {
         document.getElementById('userInfo').innerText = `Admin: ${this.user.vnaam} ${this.user.naam}`;
         
-        // Dynamische teksten inladen
         const settings = await window.dbApi.getAppSettings();
         if (settings.app_title) {
             if (document.getElementById('navTitle')) document.getElementById('navTitle').innerText = settings.app_title + " Admin";
             if (document.getElementById('pageTitle')) document.title = settings.app_title + " Admin";
         }
 
-        // NIEUW: Reizen ophalen
         this.reizen = await window.dbApi.getReizen(false);
-
-        // Hotels ophalen voor de dropdown en tabellen (haal ALLES op in admin, ook verborgen)
         this.hotels = await window.dbApi.getHotels(false);
         
-        this.populateReisDropdown(); // NIEUW
+        this.populateReisDropdown(); 
         this.populateHotelDropdown();
 
         this.setTab(this.currentTab);
 
-        // NIEUW: Event listener voor reis toevoegen
         const addReisForm = document.getElementById('addReisForm');
         if (addReisForm) {
             addReisForm.addEventListener('submit', (e) => {
@@ -60,7 +55,6 @@ class AdminApp {
             this.changePassword();
         });
 
-        // Event listener voor bestemming toevoegen (inclusief afbeelding)
         const addBestemmingForm = document.getElementById('addBestemmingForm');
         if (addBestemmingForm) {
             addBestemmingForm.addEventListener('submit', (e) => {
@@ -82,7 +76,6 @@ class AdminApp {
         }, 3000);
     }
 
-    // NIEUW: Reizen dropdown vullen
     populateReisDropdown() {
         const select = document.getElementById('b_reis');
         if(!select) return;
@@ -100,16 +93,16 @@ class AdminApp {
         if(!select) return;
         select.innerHTML = '';
         this.hotels.forEach(h => {
-            const reisNaam = h.reis ? h.reis.naam : 'Geen Reis'; // AANGEPAST
+            const reisNaam = h.reis ? h.reis.naam : 'Geen Reis'; 
             const opt = document.createElement('option');
             opt.value = h.id;
-            opt.innerText = `${h.naam} (${reisNaam})`; // AANGEPAST
+            opt.innerText = `${h.naam} (${reisNaam})`; 
             select.appendChild(opt);
         });
     }
 
     refreshCurrentTab() {
-        if (this.currentTab === 'reizen') this.renderReizen(); // NIEUW
+        if (this.currentTab === 'reizen') this.renderReizen(); 
         if (this.currentTab === 'kamers') this.renderKamers();
         if (this.currentTab === 'reservaties') this.renderReservaties();
         if (this.currentTab === 'leerlingen') this.renderLeerlingen();
@@ -119,14 +112,13 @@ class AdminApp {
     setTab(tab) {
         this.currentTab = tab;
         
-        // Nu met de 'reizen' string toegevoegd aan de lijst
+        // BUG OPGELOST: 'reizen' staat nu netjes in deze array, waardoor hij verborgen wordt als je een ander tabblad kiest!
         ['reizen', 'kamers', 'reservaties', 'leerlingen', 'instellingen', 'bestemmingen', 'export'].forEach(t => {
             const contentEl = document.getElementById(`content-${t}`);
             if(contentEl) contentEl.classList.add('hidden');
             
             const navBtn = document.getElementById(`nav-${t}`);
             if(navBtn) {
-                // Verwijder oranje of groene selectie kleuren
                 navBtn.classList.remove('text-orange-600', 'bg-orange-50', 'border-l-4', 'border-orange-500', 'text-green-600', 'bg-green-50', 'border-green-500');
                 navBtn.classList.add('text-gray-600');
             }
@@ -138,8 +130,6 @@ class AdminApp {
         const activeNav = document.getElementById(`nav-${tab}`);
         if(activeNav) {
             activeNav.classList.remove('text-gray-600');
-            
-            // Geef export knop een groene stijl, de rest oranje
             if (tab === 'export') {
                 activeNav.classList.add('text-green-600', 'bg-green-50', 'border-l-4', 'border-green-500');
             } else {
@@ -150,7 +140,7 @@ class AdminApp {
         this.refreshCurrentTab();
     }
 
-    // --- NIEUW: REIZEN LOGICA ---
+    // --- REIZEN LOGICA (MET UPLOAD) ---
     async renderReizen() {
         const tbody = document.getElementById('reizenTableBody');
         if (!tbody) return;
@@ -163,10 +153,15 @@ class AdminApp {
             tr.className = 'border-b hover:bg-gray-50 transition';
             const checkedState = r.is_actief ? 'checked' : '';
             
+            // Toon een klikbare 'Bekijk Foto' link als het een volledige URL is, anders gewoon de tekst
+            const bgHtml = r.login_bg.startsWith('http') 
+                ? `<a href="${r.login_bg}" target="_blank" class="text-blue-500 hover:underline">Bekijk Foto</a>` 
+                : `<span class="text-gray-400">${r.login_bg}</span>`;
+
             tr.innerHTML = `
                 <td class="p-3 text-gray-500">#${r.id}</td>
                 <td class="p-3 font-bold">${r.naam}</td>
-                <td class="p-3 text-gray-400 text-xs">${r.login_bg}</td>
+                <td class="p-3 text-xs">${bgHtml}</td>
                 <td class="p-3 text-center">
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" ${checkedState} onchange="window.adminApp.toggleReis(${r.id}, this.checked)" class="sr-only peer">
@@ -180,22 +175,35 @@ class AdminApp {
 
     async addReis() {
         const naam = document.getElementById('r_naam').value;
-        const foto = document.getElementById('r_foto').value;
-        const res = await window.dbApi.addReis(naam, foto);
+        const fileInput = document.getElementById('r_foto');
+        const file = fileInput.files[0];
+        
+        if (!file) return this.showAlert("Je moet een afbeelding selecteren.", "error");
+
+        this.showAlert("Foto aan het uploaden... één momentje alstublieft.", "info");
+
+        // 1. Upload de foto eerst
+        const uploadRes = await window.dbApi.uploadAfbeelding(file);
+        if (!uploadRes.success) {
+            return this.showAlert("Fout bij het uploaden van de foto: " + uploadRes.message, "error");
+        }
+
+        // 2. Bewaar de reis in de database met de link naar de foto
+        const res = await window.dbApi.addReis(naam, uploadRes.url);
         
         if (res.success) {
-            this.showAlert("Reis toegevoegd!", "success");
+            this.showAlert("Reis inclusief inlogfoto toegevoegd!", "success");
             document.getElementById('addReisForm').reset();
-            await this.init(); // Herlaad alles zodat dropdowns updaten
+            await this.init(); 
         } else {
-            this.showAlert("Fout bij toevoegen.", "error");
+            this.showAlert("Fout bij opslaan in database.", "error");
         }
     }
 
     async toggleReis(id, isActief) {
         if (!isActief) {
             this.showAlert("Er moet altijd een reis actief zijn om in te loggen.", "error");
-            this.renderReizen(); // Zet checkbox terug
+            this.renderReizen(); 
             return;
         }
         await window.dbApi.toggleReisActief(id, isActief);
@@ -203,65 +211,29 @@ class AdminApp {
         this.renderReizen();
     }
 
-    // --- CSV EXPORT LOGICA ---
-    async exportKamersCSV() {
-        const kamers = await window.dbApi.getAllKamersAdmin();
-        if (!kamers || kamers.length === 0) {
-            this.showAlert("Er zijn geen kamers om te exporteren.", "error");
-            return;
-        }
-
-        // CSV Headers
-        let csvContent = "Kamer Nummer;Bestemming;Geslacht;Capaciteit;Bezet;Vrij;Namen Leerlingen\n";
-
-        kamers.forEach(k => {
-            const hInfo = this.hotels.find(x => x.id === k.hotelid);
-            const hotelNaam = hInfo ? hInfo.naam : 'Onbekend';
-            const geslacht = k.geslacht === 'M' ? 'Jongens' : 'Meisjes';
-            const vrij = k.capaciteit - k.bezet;
-            
-            // Haal de namen op van de reservaties, voeg ze samen met een komma
-            const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : 'Onbekend').join(', ');
-            
-            // We doen de namen tussen aanhalingstekens (") zodat Excel niet per ongeluk een extra kolom maakt bij een komma
-            const escapedNamen = `"${namen}"`;
-            
-            csvContent += `${k.kamer_nr};${hotelNaam};${geslacht};${k.capaciteit};${k.bezet};${vrij};${escapedNamen}\n`;
-        });
-
-        // Maak een "Blob" (bestand) aan en start de download
-        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); // \uFEFF zorgt dat Excel speciale tekens goed pakt
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", "kamerverdeling_export.csv");
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        this.showAlert("CSV Export succesvol gedownload!", "success");
-    }
-
-    // --- BESTEMMINGEN LOGICA ---
+    // --- BESTEMMINGEN LOGICA (MET UPLOAD) ---
     async renderBestemmingen() {
         const tbody = document.getElementById('bestemmingenTableBody');
         if (!tbody) return;
         
-        const alleHotels = await window.dbApi.getHotels(false);
+        this.hotels = await window.dbApi.getHotels(false);
         tbody.innerHTML = '';
 
-        alleHotels.forEach(h => {
+        this.hotels.forEach(h => {
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50 transition';
             
             const checkedState = h.is_actief ? 'checked' : '';
-            const reisNaam = h.reis ? h.reis.naam : '<span class="text-red-500">Geen</span>'; // NIEUW
+            const reisNaam = h.reis ? h.reis.naam : '<span class="text-red-500">Geen</span>'; 
+
+            const bgHtml = h.bg_image.startsWith('http') 
+                ? `<a href="${h.bg_image}" target="_blank" class="text-blue-500 hover:underline">Bekijk Foto</a>` 
+                : `<span class="text-gray-400">${h.bg_image}</span>`;
             
             tr.innerHTML = `
                 <td class="p-3 text-xs font-bold text-gray-500">${reisNaam}</td>
                 <td class="p-3 font-bold">${h.naam}</td>
-                <td class="p-3 text-gray-400 text-xs">${h.bg_image}</td>
+                <td class="p-3 text-xs">${bgHtml}</td>
                 <td class="p-3 text-center">
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" ${checkedState} onchange="window.adminApp.toggleBestemming(${h.id}, this.checked)" class="sr-only peer">
@@ -274,17 +246,29 @@ class AdminApp {
     }
 
     async addBestemming() {
-        const reis_id = document.getElementById('b_reis').value; // NIEUW
+        const reis_id = document.getElementById('b_reis').value; 
         const naam = document.getElementById('b_naam').value;
-        const foto = document.getElementById('b_foto').value;
+        const fileInput = document.getElementById('b_foto');
+        const file = fileInput.files[0];
 
-        const res = await window.dbApi.addHotel(reis_id, naam, foto); // AANGEPAST
+        if (!file) return this.showAlert("Je moet een dashboardfoto selecteren.", "error");
+
+        this.showAlert("Foto aan het uploaden... één momentje alstublieft.", "info");
+
+        // 1. Upload de foto eerst
+        const uploadRes = await window.dbApi.uploadAfbeelding(file);
+        if (!uploadRes.success) {
+            return this.showAlert("Fout bij het uploaden van de foto: " + uploadRes.message, "error");
+        }
+
+        // 2. Sla het hotel op inclusief de nieuwe weblink naar de foto
+        const res = await window.dbApi.addHotel(reis_id, naam, uploadRes.url); 
         
         if (res.success) {
             this.hotels = await window.dbApi.getHotels(false);
             this.populateHotelDropdown();
             
-            this.showAlert("Bestemming toegevoegd! (Staat standaard onzichtbaar)", "success");
+            this.showAlert("Bestemming/Hotel en dashboardfoto toegevoegd!", "success");
             const form = document.getElementById('addBestemmingForm');
             if(form) form.reset();
             this.renderBestemmingen();
@@ -336,23 +320,15 @@ class AdminApp {
         const geslacht = document.getElementById('k_geslacht').value;
         const cap = document.getElementById('k_cap').value;
 
-        // Slimme nummering: Zoekt of er een getal achteraan de tekst staat.
-        // Als je "101" invoert, telt hij op: 101, 102, 103...
-        // Als je "Kamer" invoert, voegt hij er cijfers aan toe: Kamer 1, Kamer 2...
         let match = startNrTekst.match(/^(.*?)(\d+)$/);
         let prefix = match ? match[1] : startNrTekst + " ";
         let startNummer = match ? parseInt(match[2]) : 1;
 
-        let kamersArray = []; // Hierin verzamelen we alle nieuwe kamers
+        let kamersArray = []; 
 
         for(let i = 0; i < aantal; i++) {
             let kamerNr = match ? prefix + (startNummer + i) : prefix + (i + 1);
-            
-            // Uitzondering: als je maar 1 kamer toevoegt zonder een getal erin
-            if(!match && aantal === 1) {
-                kamerNr = startNrTekst; 
-            }
-
+            if(!match && aantal === 1) { kamerNr = startNrTekst; }
             kamersArray.push({
                 hotel_id: parseInt(hotel),
                 kamer_nr: kamerNr,
@@ -361,9 +337,7 @@ class AdminApp {
             });
         }
 
-        // Stuur in één klap de hele waslijst naar de database
         await window.dbApi.addMeerdereKamers(kamersArray);
-        
         this.showAlert(`${aantal} kamer(s) succesvol toegevoegd!`, "success");
         document.getElementById('addKamerForm').reset();
         this.renderKamers();
@@ -549,6 +523,40 @@ class AdminApp {
                 this.showAlert(res.message, "error");
             }
         }
+    }
+
+    // --- CSV EXPORT LOGICA ---
+    async exportKamersCSV() {
+        const kamers = await window.dbApi.getAllKamersAdmin();
+        if (!kamers || kamers.length === 0) {
+            this.showAlert("Er zijn geen kamers om te exporteren.", "error");
+            return;
+        }
+
+        let csvContent = "Kamer Nummer;Bestemming;Geslacht;Capaciteit;Bezet;Vrij;Namen Leerlingen\n";
+
+        kamers.forEach(k => {
+            const hInfo = this.hotels.find(x => x.id === k.hotelid);
+            const hotelNaam = hInfo ? hInfo.naam : 'Onbekend';
+            const geslacht = k.geslacht === 'M' ? 'Jongens' : 'Meisjes';
+            const vrij = k.capaciteit - k.bezet;
+            const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : 'Onbekend').join(', ');
+            const escapedNamen = `"${namen}"`;
+            
+            csvContent += `${k.kamer_nr};${hotelNaam};${geslacht};${k.capaciteit};${k.bezet};${vrij};${escapedNamen}\n`;
+        });
+
+        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", "kamerverdeling_export.csv");
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        this.showAlert("CSV Export succesvol gedownload!", "success");
     }
 
     // --- INSTELLINGEN LOGICA ---
