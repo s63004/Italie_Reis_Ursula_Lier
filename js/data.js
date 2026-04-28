@@ -54,7 +54,31 @@ async function getAppSettings() {
     }, {});
 }
 
-// --- NIEUW: REIZEN LOGICA ---
+// --- NIEUW: FOTO UPLOAD LOGICA ---
+async function uploadAfbeelding(file) {
+    // Maak een unieke naam zodat foto's met dezelfde naam elkaar niet overschrijven
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+    
+    // Stuur de foto naar de 'afbeeldingen' bucket in Supabase Storage
+    const { data, error } = await supabaseClient.storage
+        .from('afbeeldingen')
+        .upload(fileName, file, { cacheControl: '3600', upsert: false });
+        
+    if (error) {
+        console.error("Upload error:", error);
+        return { success: false, message: error.message };
+    }
+    
+    // Haal de openbare URL op
+    const { data: urlData } = supabaseClient.storage
+        .from('afbeeldingen')
+        .getPublicUrl(fileName);
+        
+    return { success: true, url: urlData.publicUrl };
+}
+
+// --- REIZEN LOGICA ---
 async function getReizen(onlyActive = false) {
     let query = supabaseClient.from('reis').select('*').order('id');
     if (onlyActive) query = query.eq('is_actief', true);
@@ -72,16 +96,14 @@ async function addReis(naam, login_bg) {
 }
 
 async function toggleReisActief(id, is_actief) {
-    // Zet eerst alle andere reizen op inactief als we deze activeren (er mag er maar 1 actief zijn)
     if (is_actief) {
         await supabaseClient.from('reis').update({ is_actief: false }).neq('id', 0);
     }
     await supabaseClient.from('reis').update({ is_actief }).eq('id', id);
     return { success: true };
 }
-// ----------------------------
 
-// --- AANGEPAST: HOTELS NU GEKOPPELD AAN REIZEN ---
+// --- HOTELS LOGICA ---
 async function getHotels(onlyActive = false, reisId = null) {
     let query = supabaseClient.from('hotel').select('*, reis:reis_id(*)').order('id');
     if (onlyActive) query = query.eq('is_actief', true);
@@ -110,7 +132,6 @@ async function toggleHotelActief(id, is_actief) {
     await supabaseClient.from('hotel').update({ is_actief }).eq('id', id);
     return { success: true };
 }
-// ----------------------------
 
 async function initializeDB() {
     const { count } = await supabaseClient.from('kamer').select('*', { count: 'exact', head: true });
@@ -325,7 +346,6 @@ async function getAllKamersAdmin() {
     });
 }
 
-// --- NIEUW: BULK KAMERS TOEVOEGEN ---
 async function addMeerdereKamers(kamersArray) {
     await supabaseClient.from('kamer').insert(kamersArray);
     const u = getCurrentUser();
@@ -409,12 +429,11 @@ async function importCSVLeerlingen(csvText) {
     } catch (e) { return { success: false, message: "Er ging iets mis tijdens het verwerken van de CSV." }; }
 }
 
-// Hier worden nu netjes alle nieuwe reizen- en hotel-functies samen met de bulk-functie geëxporteerd:
 window.dbApi = {
     login, logout, getCurrentUser, initializeDB, getKamersMetStatus, reserveerPlek,
     bevestigReservatie, checkTimeouts, annuleerPending, searchStudent, searchStudentForLogin,
     syncServerTime, getEstimatedServerTime, verifyTeacherPassword, updateTeacherPassword,
     getAllKamersAdmin, addKamer, addMeerdereKamers, updateKamer, deleteKamer, removeReservatieAdmin,
-    getAllLeerlingen, addLeerling, deleteLeerling, importCSVLeerlingen,
+    getAllLeerlingen, addLeerling, deleteLeerling, importCSVLeerlingen, uploadAfbeelding, // TOEGEVOEGD
     getAppSettings, getReizen, addReis, toggleReisActief, getHotels, addHotel, updateHotel, toggleHotelActief, supabaseClient
 };
