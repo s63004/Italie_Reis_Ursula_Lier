@@ -145,5 +145,23 @@
             }
         }
     </script>
+    <script>
+        // Laad de actieve reis in zodra de pagina start
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Haal de actieve reis op uit de database
+            const reizen = await window.dbApi.getReizen(true); 
+            
+            if (reizen && reizen.length > 0) {
+                const actieveReis = reizen[0];
+                
+                // Pas de achtergrond aan
+                document.getElementById('bgImage').src = actieveReis.login_bg;
+                
+                // Pas eventueel de titel aan (als je die id='hoofdTitle' geeft in je HTML)
+                const titleEl = document.getElementById('hoofdTitle');
+                if (titleEl) titleEl.innerText = actieveReis.naam;
+            }
+        });
+    </script>
 </body>
 </html>
