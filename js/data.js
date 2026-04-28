@@ -54,19 +54,48 @@ async function getAppSettings() {
     }, {});
 }
 
-async function getHotels(onlyActive = false) {
-    let query = supabaseClient.from('hotel').select('*').order('id');
+// --- NIEUW: REIZEN LOGICA ---
+async function getReizen(onlyActive = false) {
+    let query = supabaseClient.from('reis').select('*').order('id');
     if (onlyActive) query = query.eq('is_actief', true);
+    
+    const { data, error } = await query;
+    if (error) console.error("Fout bij ophalen reizen", error);
+    return data || [];
+}
+
+async function addReis(naam, login_bg) {
+    await supabaseClient.from('reis').insert([{ naam, login_bg, is_actief: false }]);
+    const u = getCurrentUser();
+    await writeLog('ADMIN_ADD_REIS', u.id, `Reis ${naam} toegevoegd`);
+    return { success: true };
+}
+
+async function toggleReisActief(id, is_actief) {
+    // Zet eerst alle andere reizen op inactief als we deze activeren (er mag er maar 1 actief zijn)
+    if (is_actief) {
+        await supabaseClient.from('reis').update({ is_actief: false }).neq('id', 0);
+    }
+    await supabaseClient.from('reis').update({ is_actief }).eq('id', id);
+    return { success: true };
+}
+// ----------------------------
+
+// --- AANGEPAST: HOTELS NU GEKOPPELD AAN REIZEN ---
+async function getHotels(onlyActive = false, reisId = null) {
+    let query = supabaseClient.from('hotel').select('*, reis:reis_id(*)').order('id');
+    if (onlyActive) query = query.eq('is_actief', true);
+    if (reisId) query = query.eq('reis_id', reisId);
     
     const { data, error } = await query;
     if (error) console.error("Fout bij ophalen hotels", error);
     return data || [];
 }
 
-async function addHotel(naam, bg_image) {
-    await supabaseClient.from('hotel').insert([{ naam, bg_image, is_actief: false }]);
+async function addHotel(reis_id, naam, bg_image) {
+    await supabaseClient.from('hotel').insert([{ reis_id: parseInt(reis_id), naam, bg_image, is_actief: false }]);
     const u = getCurrentUser();
-    await writeLog('ADMIN_ADD_HOTEL', u.id, `Bestemming ${naam} toegevoegd met foto ${bg_image}`);
+    await writeLog('ADMIN_ADD_HOTEL', u.id, `Hotel ${naam} toegevoegd aan reis ${reis_id}`);
     return { success: true };
 }
 
@@ -81,6 +110,7 @@ async function toggleHotelActief(id, is_actief) {
     await supabaseClient.from('hotel').update({ is_actief }).eq('id', id);
     return { success: true };
 }
+// ----------------------------
 
 async function initializeDB() {
     const { count } = await supabaseClient.from('kamer').select('*', { count: 'exact', head: true });
@@ -295,6 +325,14 @@ async function getAllKamersAdmin() {
     });
 }
 
+// --- NIEUW: BULK KAMERS TOEVOEGEN ---
+async function addMeerdereKamers(kamersArray) {
+    await supabaseClient.from('kamer').insert(kamersArray);
+    const u = getCurrentUser();
+    await writeLog('ADMIN_ADD_KAMERS_BULK', u.id, `${kamersArray.length} kamers tegelijk toegevoegd`);
+    return { success: true };
+}
+
 async function addKamer(hotel_id, kamer_nr, geslacht, capaciteit) {
     await supabaseClient.from('kamer').insert([{ hotel_id: parseInt(hotel_id), kamer_nr, geslacht, capaciteit: parseInt(capaciteit) }]);
     const u = getCurrentUser();
@@ -371,11 +409,12 @@ async function importCSVLeerlingen(csvText) {
     } catch (e) { return { success: false, message: "Er ging iets mis tijdens het verwerken van de CSV." }; }
 }
 
+// Hier worden nu netjes alle nieuwe reizen- en hotel-functies samen met de bulk-functie geëxporteerd:
 window.dbApi = {
     login, logout, getCurrentUser, initializeDB, getKamersMetStatus, reserveerPlek,
     bevestigReservatie, checkTimeouts, annuleerPending, searchStudent, searchStudentForLogin,
     syncServerTime, getEstimatedServerTime, verifyTeacherPassword, updateTeacherPassword,
-    getAllKamersAdmin, addKamer, updateKamer, deleteKamer, removeReservatieAdmin,
+    getAllKamersAdmin, addKamer, addMeerdereKamers, updateKamer, deleteKamer, removeReservatieAdmin,
     getAllLeerlingen, addLeerling, deleteLeerling, importCSVLeerlingen,
-    getAppSettings, getHotels, addHotel, updateHotel, toggleHotelActief, supabaseClient
+    getAppSettings, getReizen, addReis, toggleReisActief, getHotels, addHotel, updateHotel, toggleHotelActief, supabaseClient
 };
