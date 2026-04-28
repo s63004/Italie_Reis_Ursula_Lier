@@ -246,12 +246,40 @@ class AdminApp {
 
     async addKamer() {
         const hotel = document.getElementById('k_hotel').value;
-        const nr = document.getElementById('k_nr').value;
+        const startNrTekst = document.getElementById('k_nr').value;
+        const aantal = parseInt(document.getElementById('k_aantal').value) || 1;
         const geslacht = document.getElementById('k_geslacht').value;
         const cap = document.getElementById('k_cap').value;
 
-        await window.dbApi.addKamer(hotel, nr, geslacht, cap);
-        this.showAlert("Kamer toegevoegd!", "success");
+        // Slimme nummering: Zoekt of er een getal achteraan de tekst staat.
+        // Als je "101" invoert, telt hij op: 101, 102, 103...
+        // Als je "Kamer" invoert, voegt hij er cijfers aan toe: Kamer 1, Kamer 2...
+        let match = startNrTekst.match(/^(.*?)(\d+)$/);
+        let prefix = match ? match[1] : startNrTekst + " ";
+        let startNummer = match ? parseInt(match[2]) : 1;
+
+        let kamersArray = []; // Hierin verzamelen we alle nieuwe kamers
+
+        for(let i = 0; i < aantal; i++) {
+            let kamerNr = match ? prefix + (startNummer + i) : prefix + (i + 1);
+            
+            // Uitzondering: als je maar 1 kamer toevoegt zonder een getal erin
+            if(!match && aantal === 1) {
+                kamerNr = startNrTekst; 
+            }
+
+            kamersArray.push({
+                hotel_id: parseInt(hotel),
+                kamer_nr: kamerNr,
+                geslacht: geslacht,
+                capaciteit: parseInt(cap)
+            });
+        }
+
+        // Stuur in één klap de hele waslijst naar de database
+        await window.dbApi.addMeerdereKamers(kamersArray);
+        
+        this.showAlert(`${aantal} kamer(s) succesvol toegevoegd!`, "success");
         document.getElementById('addKamerForm').reset();
         this.renderKamers();
     }
