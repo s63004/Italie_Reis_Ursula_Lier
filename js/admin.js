@@ -112,7 +112,6 @@ class AdminApp {
     setTab(tab) {
         this.currentTab = tab;
         
-        // BUG OPGELOST: 'reizen' staat nu netjes in deze array, waardoor hij verborgen wordt als je een ander tabblad kiest!
         ['reizen', 'kamers', 'reservaties', 'leerlingen', 'instellingen', 'bestemmingen', 'export'].forEach(t => {
             const contentEl = document.getElementById(`content-${t}`);
             if(contentEl) contentEl.classList.add('hidden');
@@ -153,7 +152,6 @@ class AdminApp {
             tr.className = 'border-b hover:bg-gray-50 transition';
             const checkedState = r.is_actief ? 'checked' : '';
             
-            // Toon een klikbare 'Bekijk Foto' link als het een volledige URL is, anders gewoon de tekst
             const bgHtml = r.login_bg.startsWith('http') 
                 ? `<a href="${r.login_bg}" target="_blank" class="text-blue-500 hover:underline">Bekijk Foto</a>` 
                 : `<span class="text-gray-400">${r.login_bg}</span>`;
@@ -182,13 +180,9 @@ class AdminApp {
 
         this.showAlert("Foto aan het uploaden... één momentje alstublieft.", "info");
 
-        // 1. Upload de foto eerst
         const uploadRes = await window.dbApi.uploadAfbeelding(file);
-        if (!uploadRes.success) {
-            return this.showAlert("Fout bij het uploaden van de foto: " + uploadRes.message, "error");
-        }
+        if (!uploadRes.success) return this.showAlert("Fout bij het uploaden van de foto: " + uploadRes.message, "error");
 
-        // 2. Bewaar de reis in de database met de link naar de foto
         const res = await window.dbApi.addReis(naam, uploadRes.url);
         
         if (res.success) {
@@ -209,6 +203,119 @@ class AdminApp {
         await window.dbApi.toggleReisActief(id, isActief);
         this.showAlert("Actieve reis gewijzigd! Inlogscherm is geüpdatet.", "success");
         this.renderReizen();
+    }
+
+    // --- NIEUW: ECHTE EXCEL (.xlsx) EXPORT LOGICA ---
+    async exportKamersExcel() {
+        if (!window.ExcelJS) {
+            return this.showAlert("Excel bibliotheek is nog aan het inladen, probeer het zo nog eens.", "error");
+        }
+
+        const kamers = await window.dbApi.getAllKamersAdmin();
+        if (!kamers || kamers.length === 0) return this.showAlert("Er zijn geen kamers om te exporteren.", "error");
+
+        this.showAlert("Excel-bestand wordt opgemaakt...", "info");
+
+        // Haal de naam van de actieve reis op voor de titel
+        const actieveReizen = await window.dbApi.getReizen(true);
+        const actieveReisNaam = actieveReizen.length > 0 ? actieveReizen[0].naam : "Kamerverdeling Overzicht";
+
+        // Groepeer alle kamers netjes per Hotel
+        const kamersPerHotel = {};
+        this.hotels.forEach(h => kamersPerHotel[h.id] = { naam: h.naam, kamers: [] });
+        kamers.forEach(k => {
+            if (kamersPerHotel[k.hotelid]) kamersPerHotel[k.hotelid].kamers.push(k);
+        });
+        const hotelIds = Object.keys(kamersPerHotel).filter(id => kamersPerHotel[id].kamers.length > 0);
+
+        // Maak het Excel werkboek aan
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Overzicht');
+
+        // GROTE ORANJE TITEL BOVENAAN
+        sheet.mergeCells('A1:J2');
+        const titleCell = sheet.getCell('A1');
+        titleCell.value = actieveReisNaam.toUpperCase();
+        titleCell.font = { size: 18, bold: true, color: { argb: 'FFFFFFFF' } }; // Witte tekst
+        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED8936' } }; // Oranje achtergrond
+        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        // We houden bij op welke Excel-rij we zitten aan de linker (0) en rechter (1) kant
+        let rowTrackers = [4, 4]; 
+        
+        hotelIds.forEach((hotelId, index) => {
+            const side = index % 2; // 0 = Links (kolom A), 1 = Rechts (kolom F)
+            let currentRow = rowTrackers[side];
+            const colStart = side === 0 ? 1 : 6; // Kolom A of Kolom F
+
+            // HOTEL TITEL BALK
+            sheet.mergeCells(currentRow, colStart, currentRow, colStart + 3);
+            const hTitle = sheet.getCell(currentRow, colStart);
+            hTitle.value = kamersPerHotel[hotelId].naam;
+            hTitle.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+            hTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A5568' } }; // Donkergrijs
+            hTitle.alignment = { horizontal: 'center' };
+            currentRow++;
+
+            // TABEL KOPJES
+            const headers = ['Kamer', 'Capaciteit', 'Bezet', 'Namen Leerlingen'];
+            headers.forEach((h, i) => {
+                const cell = sheet.getCell(currentRow, colStart + i);
+                cell.value = h;
+                cell.font = { bold: true };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; // Lichtgrijs
+                cell.border = { bottom: { style: 'thin' } };
+            });
+            currentRow++;
+
+            // TABEL RIJEN (KAMERS)
+            kamersPerHotel[hotelId].kamers.forEach(k => {
+                const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : '?').join(', ');
+                const rowData = [ k.kamer_nr, k.capaciteit, k.bezet, namen ];
+
+                // KLEUREN VOOR GESLACHT! (Blauw voor Jongens, Roze voor Meisjes)
+                const bgColor = k.geslacht === 'M' ? 'FFBEE3F8' : 'FFFED7E2'; 
+
+                rowData.forEach((val, i) => {
+                    const cell = sheet.getCell(currentRow, colStart + i);
+                    cell.value = val;
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+                    cell.border = { bottom: { style: 'hair' }, right: { style: 'hair' }, left: {style: 'hair'}, top: {style: 'hair'} };
+                    
+                    if (i < 3) cell.alignment = { horizontal: 'center' }; // Cijfers in het midden
+                });
+                currentRow++;
+            });
+
+            currentRow += 2; // Extra witruimte na een hotel
+            rowTrackers[side] = currentRow; // Sla de rij op voor de volgende tabel aan deze kant
+        });
+
+        // Breedte van de kolommen mooi instellen
+        sheet.getColumn(1).width = 12; // A - Kamer Links
+        sheet.getColumn(2).width = 10; // B - Cap Links
+        sheet.getColumn(3).width = 10; // C - Bezet Links
+        sheet.getColumn(4).width = 40; // D - Namen Links
+
+        sheet.getColumn(5).width = 3;  // E - TUSSENRUIMTE
+
+        sheet.getColumn(6).width = 12; // F - Kamer Rechts
+        sheet.getColumn(7).width = 10; // G - Cap Rechts
+        sheet.getColumn(8).width = 10; // H - Bezet Rechts
+        sheet.getColumn(9).width = 40; // I - Namen Rechts
+
+        // Download het bestand naar de computer
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `Kamerverdeling_${actieveReisNaam.replace(/\s+/g, '_')}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        this.showAlert("Prachtig Excel-bestand succesvol gedownload!", "success");
     }
 
     // --- BESTEMMINGEN LOGICA (MET UPLOAD) ---
@@ -255,13 +362,9 @@ class AdminApp {
 
         this.showAlert("Foto aan het uploaden... één momentje alstublieft.", "info");
 
-        // 1. Upload de foto eerst
         const uploadRes = await window.dbApi.uploadAfbeelding(file);
-        if (!uploadRes.success) {
-            return this.showAlert("Fout bij het uploaden van de foto: " + uploadRes.message, "error");
-        }
+        if (!uploadRes.success) return this.showAlert("Fout bij het uploaden van de foto: " + uploadRes.message, "error");
 
-        // 2. Sla het hotel op inclusief de nieuwe weblink naar de foto
         const res = await window.dbApi.addHotel(reis_id, naam, uploadRes.url); 
         
         if (res.success) {
@@ -525,40 +628,6 @@ class AdminApp {
         }
     }
 
-    // --- CSV EXPORT LOGICA ---
-    async exportKamersCSV() {
-        const kamers = await window.dbApi.getAllKamersAdmin();
-        if (!kamers || kamers.length === 0) {
-            this.showAlert("Er zijn geen kamers om te exporteren.", "error");
-            return;
-        }
-
-        let csvContent = "Kamer Nummer;Bestemming;Geslacht;Capaciteit;Bezet;Vrij;Namen Leerlingen\n";
-
-        kamers.forEach(k => {
-            const hInfo = this.hotels.find(x => x.id === k.hotelid);
-            const hotelNaam = hInfo ? hInfo.naam : 'Onbekend';
-            const geslacht = k.geslacht === 'M' ? 'Jongens' : 'Meisjes';
-            const vrij = k.capaciteit - k.bezet;
-            const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : 'Onbekend').join(', ');
-            const escapedNamen = `"${namen}"`;
-            
-            csvContent += `${k.kamer_nr};${hotelNaam};${geslacht};${k.capaciteit};${k.bezet};${vrij};${escapedNamen}\n`;
-        });
-
-        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); 
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.setAttribute("href", url);
-        link.setAttribute("download", "kamerverdeling_export.csv");
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        this.showAlert("CSV Export succesvol gedownload!", "success");
-    }
-
     // --- INSTELLINGEN LOGICA ---
     async changePassword() {
         const oldPw = document.getElementById('pw_old').value;
@@ -586,11 +655,11 @@ class AdminApp {
         const box = document.getElementById('alertBox');
         if(!box) return;
         box.innerText = msg;
-        box.className = 'mb-6 p-4 rounded-xl border block transition-opacity font-medium shadow-sm';
+        box.className = 'mb-6 p-4 rounded-xl border block transition-opacity font-medium shadow-sm z-50';
         
         if (type === 'success') box.classList.add('bg-green-50', 'text-green-800', 'border-green-200');
         else if (type === 'error') box.classList.add('bg-red-50', 'text-red-800', 'border-red-200');
-        else box.classList.add('bg-blue-50', 'text-blue-800', 'border-blue-200');
+        else if (type === 'info') box.classList.add('bg-blue-50', 'text-blue-800', 'border-blue-200');
 
         setTimeout(() => {
             box.classList.add('hidden');
