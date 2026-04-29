@@ -1,4 +1,4 @@
-// admin.js - Logica voor het Admin Paneel
+// admin.js - Logica voor het Admin Paneel (Multi-Tenant & Geprofessionaliseerd)
 
 class AdminApp {
     constructor() {
@@ -12,7 +12,7 @@ class AdminApp {
         this.currentTab = 'reizen'; 
         this.hotels = [];
         this.reizen = []; 
-        this.editContext = null; // Voor het generieke modal
+        this.editContext = null; 
         this.init();
     }
 
@@ -21,10 +21,11 @@ class AdminApp {
         
         const settings = await window.dbApi.getAppSettings();
         if (settings.app_title) {
-            if (document.getElementById('navTitle')) document.getElementById('navTitle').innerText = settings.app_title + " Admin";
-            if (document.getElementById('pageTitle')) document.title = settings.app_title + " Admin";
+            if (document.getElementById('navTitle')) document.getElementById('navTitle').innerText = settings.app_title + " Beheer";
+            if (document.getElementById('pageTitle')) document.title = settings.app_title + " Beheer";
         }
 
+        // Haalt enkel de reizen en hotels van de EIGEN school op (via dbApi update die we nog doen)
         this.reizen = await window.dbApi.getReizen(false);
         this.hotels = await window.dbApi.getHotels(false);
         
@@ -74,7 +75,7 @@ class AdminApp {
 
         setInterval(() => {
             this.refreshCurrentTab();
-        }, 3000);
+        }, 5000);
     }
 
     populateReisDropdown() {
@@ -96,7 +97,6 @@ class AdminApp {
         if(selectAdd) selectAdd.innerHTML = '';
         if(selectFilter) {
             selectFilter.innerHTML = '';
-            // Voeg optie toe om alle hotels te tonen
             const allOpt = document.createElement('option');
             allOpt.value = "";
             allOpt.innerText = "--- Toon alle hotels ---";
@@ -106,7 +106,6 @@ class AdminApp {
         this.hotels.forEach(h => {
             const reisNaam = h.reis ? h.reis.naam : 'Geen Reis'; 
             
-            // Voor het toevoegen van een kamer
             if(selectAdd) {
                 const optAdd = document.createElement('option');
                 optAdd.value = h.id;
@@ -114,7 +113,6 @@ class AdminApp {
                 selectAdd.appendChild(optAdd);
             }
             
-            // Voor het filteren van kamers
             if(selectFilter) {
                 const optFilter = document.createElement('option');
                 optFilter.value = h.id;
@@ -162,7 +160,7 @@ class AdminApp {
         this.refreshCurrentTab();
     }
 
-    // --- REIZEN LOGICA (MET UPLOAD & EDIT/DELETE) ---
+    // --- REIZEN LOGICA ---
     async renderReizen() {
         const tbody = document.getElementById('reizenTableBody');
         if (!tbody) return;
@@ -170,23 +168,23 @@ class AdminApp {
         this.reizen = await window.dbApi.getReizen(false);
         tbody.innerHTML = '';
 
-        // Slimme truc om het GitHub Pages "mapje" (repository naam) te behouden
         let baseUrl = window.location.href.split('admin.html')[0];
+        const schoolSlug = this.user.school_slug || 'school'; // Wordt later dynamisch via sessie
 
         this.reizen.forEach(r => {
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50 transition';
             
-            // Nu maken we de link met de correcte baseUrl
-            const fullLink = `${baseUrl}login.html?reis=${r.slug}`;
+            // Multi-tenant link structuur
+            const fullLink = `${baseUrl}login.html?school=${schoolSlug}&reis=${r.slug}`;
 
             tr.innerHTML = `
-                <td class="p-3 font-bold">${r.naam}</td>
+                <td class="p-3 font-medium">${r.naam}</td>
                 <td class="p-3 text-sm text-gray-500">${r.slug}</td>
                 <td class="p-3"><button onclick="window.adminApp.copyLink('${fullLink}')" class="text-xs bg-gray-100 hover:bg-gray-200 p-1.5 rounded border border-gray-300 transition">Kopieer Link</button></td>
                 <td class="p-3 text-right">
                     <button onclick="window.adminApp.editReis(${r.id})" class="text-blue-600 hover:underline mr-3 font-medium">Bewerk</button>
-                    <button onclick="window.adminApp.deleteReis(${r.id})" class="text-red-600 hover:underline font-medium">Sloop</button>
+                    <button onclick="window.adminApp.deleteReis(${r.id})" class="text-red-600 hover:underline font-medium">Verwijder</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -199,26 +197,26 @@ class AdminApp {
         const fileInput = document.getElementById('r_foto');
         const file = fileInput.files[0];
         
-        if (!file) return this.showAlert("Je moet een afbeelding selecteren.", "error");
+        if (!file) return this.showAlert("Selecteer een achtergrondafbeelding.", "error");
 
-        this.showAlert("Foto aan het uploaden... één momentje alstublieft.", "info");
+        this.showAlert("Afbeelding wordt geüpload...", "info");
 
         const uploadRes = await window.dbApi.uploadAfbeelding(file);
-        if (!uploadRes.success) return this.showAlert("Fout bij het uploaden van de foto: " + uploadRes.message, "error");
+        if (!uploadRes.success) return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
 
         const res = await window.dbApi.addReis(naam, slug, uploadRes.url);
         
         if (res.success) {
-            this.showAlert("Reis inclusief inlogfoto toegevoegd!", "success");
+            this.showAlert("Reis succesvol aangemaakt.", "success");
             document.getElementById('addReisForm').reset();
             await this.init(); 
         } else {
-            this.showAlert(res.message || "Fout bij opslaan in database.", "error");
+            this.showAlert(res.message || "Fout bij aanmaken reis.", "error");
         }
     }
 
     async deleteReis(id) {
-        if(confirm("LET OP: Dit verwijdert de hele reis en ALLE hotels, kamers en reservaties die erbij horen! Zeker weten?")) {
+        if(confirm("Waarschuwing: Dit verwijdert de reis inclusief alle gekoppelde hotels, kamers en reservaties. Doorgaan?")) {
             const res = await window.dbApi.deleteReis(id);
             if(res.success) {
                 this.showAlert("Reis verwijderd.", "info");
@@ -241,15 +239,22 @@ class AdminApp {
                 <input type="text" id="edit_modal_naam" value="${r.naam}" class="w-full p-2 border rounded">
             </div>
             <div>
-                <label class="block text-sm font-medium mb-1">Unieke Slug</label>
+                <label class="block text-sm font-medium mb-1">URL Slug</label>
                 <input type="text" id="edit_modal_slug" value="${r.slug}" class="w-full p-2 border rounded">
             </div>
-            <p class="text-xs text-gray-500 mt-2">Let op: Als je een nieuwe inlogfoto wilt, moet je de reis verwijderen en opnieuw toevoegen.</p>
+            <div>
+                <label class="block text-sm font-medium mb-1">Nieuwe Achtergrondfoto (Optioneel)</label>
+                <input type="file" id="edit_modal_foto" accept="image/*" class="w-full p-1.5 border rounded">
+            </div>
+            <div class="flex items-center mt-2">
+                <input type="checkbox" id="edit_modal_actief" ${r.is_actief ? 'checked' : ''} class="w-4 h-4 text-blue-600 rounded">
+                <label class="ml-2 text-sm font-medium">Reis is actief (Zichtbaar voor leerlingen)</label>
+            </div>
         `;
         document.getElementById('editModal').classList.remove('hidden');
     }
 
-    // --- BESTEMMINGEN LOGICA (MET UPLOAD & EDIT/DELETE) ---
+    // --- BESTEMMINGEN LOGICA ---
     async renderBestemmingen() {
         const tbody = document.getElementById('bestemmingenTableBody');
         if (!tbody) return;
@@ -262,11 +267,11 @@ class AdminApp {
             tr.className = 'border-b hover:bg-gray-50 transition';
             
             const checkedState = h.is_actief ? 'checked' : '';
-            const reisNaam = h.reis ? h.reis.naam : '<span class="text-red-500">Geen</span>'; 
+            const reisNaam = h.reis ? h.reis.naam : '<span class="text-red-500">Niet gekoppeld</span>'; 
             
             tr.innerHTML = `
                 <td class="p-3 text-xs font-bold text-gray-500 uppercase">${reisNaam}</td>
-                <td class="p-3 font-bold">${h.naam}</td>
+                <td class="p-3 font-medium">${h.naam}</td>
                 <td class="p-3 text-center">
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" ${checkedState} onchange="window.adminApp.toggleBestemming(${h.id}, this.checked)" class="sr-only peer">
@@ -275,7 +280,7 @@ class AdminApp {
                 </td>
                 <td class="p-3 text-right">
                     <button onclick="window.adminApp.editHotel(${h.id})" class="text-blue-600 hover:underline mr-3 font-medium">Bewerk</button>
-                    <button onclick="window.adminApp.deleteHotel(${h.id})" class="text-red-600 hover:underline font-medium">Sloop</button>
+                    <button onclick="window.adminApp.deleteHotel(${h.id})" class="text-red-600 hover:underline font-medium">Verwijder</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -288,26 +293,26 @@ class AdminApp {
         const fileInput = document.getElementById('b_foto');
         const file = fileInput.files[0];
 
-        if (!file) return this.showAlert("Je moet een dashboardfoto selecteren.", "error");
+        if (!file) return this.showAlert("Selecteer een dashboardafbeelding.", "error");
 
-        this.showAlert("Foto aan het uploaden... één momentje alstublieft.", "info");
+        this.showAlert("Afbeelding wordt geüpload...", "info");
 
         const uploadRes = await window.dbApi.uploadAfbeelding(file);
-        if (!uploadRes.success) return this.showAlert("Fout bij het uploaden van de foto: " + uploadRes.message, "error");
+        if (!uploadRes.success) return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
 
         const res = await window.dbApi.addHotel(reis_id, naam, uploadRes.url); 
         
         if (res.success) {
-            this.showAlert("Bestemming/Hotel en dashboardfoto toegevoegd!", "success");
+            this.showAlert("Bestemming succesvol toegevoegd.", "success");
             document.getElementById('addBestemmingForm').reset();
             await this.init();
         } else {
-            this.showAlert("Er ging iets mis bij het toevoegen.", "error");
+            this.showAlert("Fout bij het toevoegen.", "error");
         }
     }
 
     async deleteHotel(id) {
-        if(confirm("LET OP: Dit verwijdert het hotel en ALLE kamers erin! Zeker weten?")) {
+        if(confirm("Waarschuwing: Dit verwijdert het hotel en alle bijbehorende kamers. Doorgaan?")) {
             const res = await window.dbApi.deleteHotel(id);
             if(res.success) {
                 this.showAlert("Hotel verwijderd.", "info");
@@ -323,20 +328,31 @@ class AdminApp {
         if(!h) return;
         this.editContext = { type: 'hotel', id: id };
         
+        let reisOptions = this.reizen.map(r => `<option value="${r.id}" ${h.reis_id === r.id ? 'selected' : ''}>${r.naam}</option>`).join('');
+
         document.getElementById('modalTitle').innerText = 'Hotel Aanpassen';
         document.getElementById('modalFields').innerHTML = `
+            <div>
+                <label class="block text-sm font-medium mb-1">Gekoppelde Reis</label>
+                <select id="edit_modal_reis" class="w-full p-2 border rounded bg-white">
+                    ${reisOptions}
+                </select>
+            </div>
             <div>
                 <label class="block text-sm font-medium mb-1">Hotel Naam</label>
                 <input type="text" id="edit_modal_naam" value="${h.naam}" class="w-full p-2 border rounded">
             </div>
-            <p class="text-xs text-gray-500 mt-2">Let op: Als je een nieuwe dashboardfoto wilt, moet je het hotel verwijderen en opnieuw toevoegen.</p>
+            <div>
+                <label class="block text-sm font-medium mb-1">Nieuwe Dashboardfoto (Optioneel)</label>
+                <input type="file" id="edit_modal_foto" accept="image/*" class="w-full p-1.5 border rounded">
+            </div>
         `;
         document.getElementById('editModal').classList.remove('hidden');
     }
 
     async toggleBestemming(id, isActief) {
         await window.dbApi.toggleHotelActief(id, isActief);
-        this.showAlert(isActief ? "Bestemming is nu zichtbaar!" : "Bestemming verborgen.", "info");
+        this.showAlert(isActief ? "Bestemming is nu zichtbaar." : "Bestemming verborgen.", "info");
         this.hotels = await window.dbApi.getHotels(false);
         this.populateHotelDropdowns();
     }
@@ -351,16 +367,28 @@ class AdminApp {
         if(!this.editContext) return;
         
         const naam = document.getElementById('edit_modal_naam').value;
+        const fileInput = document.getElementById('edit_modal_foto');
+        let newPhotoUrl = null;
+
+        if (fileInput && fileInput.files[0]) {
+            this.showAlert("Nieuwe foto wordt geüpload...", "info");
+            const uploadRes = await window.dbApi.uploadAfbeelding(fileInput.files[0]);
+            if (uploadRes.success) newPhotoUrl = uploadRes.url;
+            else return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
+        }
         
         if (this.editContext.type === 'reis') {
             const slug = document.getElementById('edit_modal_slug').value;
-            const res = await window.dbApi.updateReis(this.editContext.id, naam, slug);
-            if(res.success) this.showAlert("Reis succesvol aangepast.", "success");
+            const isActief = document.getElementById('edit_modal_actief').checked;
+            
+            const res = await window.dbApi.updateReis(this.editContext.id, naam, slug, newPhotoUrl, isActief);
+            if(res.success) this.showAlert("Reis succesvol bijgewerkt.", "success");
             else this.showAlert(res.message, "error");
         } 
         else if (this.editContext.type === 'hotel') {
-            const res = await window.dbApi.updateHotel(this.editContext.id, naam);
-            if(res.success) this.showAlert("Hotel succesvol aangepast.", "success");
+            const reisId = document.getElementById('edit_modal_reis').value;
+            const res = await window.dbApi.updateHotel(this.editContext.id, naam, newPhotoUrl, reisId);
+            if(res.success) this.showAlert("Hotel succesvol bijgewerkt.", "success");
             else this.showAlert(res.message, "error");
         }
 
@@ -368,12 +396,11 @@ class AdminApp {
         await this.init();
     }
 
-    // --- KAMERS LOGICA (MET FILTER) ---
+    // --- KAMERS LOGICA ---
     async renderKamers() {
         const tbody = document.getElementById('kamersTableBody');
         if (!tbody) return;
         
-        // Haal het geselecteerde hotel_id uit de filter dropdown
         const filterEl = document.getElementById('filter_k_hotel');
         const filterId = filterEl ? filterEl.value : null;
 
@@ -393,7 +420,7 @@ class AdminApp {
                 <td class="p-3">${k.capaciteit} (Bezet: ${k.bezet})</td>
                 <td class="p-3 text-right">
                     <button onclick="window.adminApp.openEditKamer(${k.id}, '${k.kamer_nr}', ${k.capaciteit}, '${k.geslacht}')" class="text-blue-500 hover:underline mr-3 font-medium">Bewerk</button>
-                    ${k.bezet === 0 ? `<button onclick="window.adminApp.deleteKamer(${k.id})" class="text-red-500 hover:underline font-medium">Sloop</button>` : '<span class="text-gray-400 text-xs italic">Bezet</span>'}
+                    ${k.bezet === 0 ? `<button onclick="window.adminApp.deleteKamer(${k.id})" class="text-red-500 hover:underline font-medium">Verwijder</button>` : '<span class="text-gray-400 text-xs italic">Bezet</span>'}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -425,7 +452,7 @@ class AdminApp {
         }
 
         await window.dbApi.addMeerdereKamers(kamersArray);
-        this.showAlert(`${aantal} kamer(s) succesvol toegevoegd!`, "success");
+        this.showAlert(`${aantal} kamer(s) succesvol toegevoegd.`, "success");
         document.getElementById('addKamerForm').reset();
         this.renderKamers();
     }
@@ -470,13 +497,13 @@ class AdminApp {
     async renderReservaties() {
         const grid = document.getElementById('resGrid');
         if(!grid) return;
-        const kamers = await window.dbApi.getAllKamersAdmin(); // Voor reservaties halen we alles op
+        const kamers = await window.dbApi.getAllKamersAdmin(); 
         grid.innerHTML = '';
 
         const bezetteKamers = kamers.filter(k => k.bezet > 0);
 
         if (bezetteKamers.length === 0) {
-            grid.innerHTML = `<div class="col-span-2 p-8 text-center text-gray-500 bg-gray-50 rounded border border-dashed">Er zijn nog geen reservaties gemaakt.</div>`;
+            grid.innerHTML = `<div class="col-span-2 p-8 text-center text-gray-500 bg-gray-50 rounded border border-gray-200">Er zijn nog geen reservaties gemaakt.</div>`;
             return;
         }
 
@@ -490,7 +517,10 @@ class AdminApp {
             let html = `
                 <div class="flex justify-between items-center mb-4 border-b pb-2">
                     <h4 class="font-bold text-gray-800">Kamer ${k.kamer_nr} <span class="text-xs font-normal text-gray-500 ml-2">(${hotelNaam} - ${k.geslacht})</span></h4>
-                    <span class="text-xs font-bold px-2 py-1 bg-gray-100 text-gray-600 rounded">${k.bezet}/${k.capaciteit}</span>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-bold px-2 py-1 bg-gray-100 text-gray-600 rounded">${k.bezet}/${k.capaciteit}</span>
+                        <button onclick="window.adminApp.kickKamer(${k.id})" class="text-xs text-red-500 hover:text-red-700 font-medium" title="Maak volledige kamer leeg">Leegmaken</button>
+                    </div>
                 </div>
                 <ul class="space-y-2">
             `;
@@ -505,7 +535,7 @@ class AdminApp {
                             <span class="font-medium text-gray-800">${user ? user.vnaam + ' ' + user.naam : 'Onbekend'}</span>
                             <span class="text-xs ${statusColor} font-semibold ml-2">(${r.status})</span>
                         </div>
-                        <button onclick="window.adminApp.kickUser('${r.id}')" class="text-xs bg-red-100 text-red-600 hover:bg-red-200 px-3 py-1 rounded font-medium transition">Verwijder</button>
+                        <button onclick="window.adminApp.kickUser('${r.id}')" class="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1 rounded font-medium transition border border-red-100">Verwijder</button>
                     </li>
                 `;
             });
@@ -517,9 +547,17 @@ class AdminApp {
     }
 
     async kickUser(resId) {
-        if(confirm("Weet je zeker dat je deze reservatie wilt verwijderen? De leerling verliest zijn plaats in deze kamer.")) {
+        if(confirm("Reservatie annuleren? De leerling verliest zijn plaats in deze kamer.")) {
             await window.dbApi.removeReservatieAdmin(resId);
-            this.showAlert("Reservatie verwijderd. De plaats is nu vrij.", "info");
+            this.showAlert("Reservatie verwijderd.", "info");
+            this.renderReservaties();
+        }
+    }
+
+    async kickKamer(kamerId) {
+        if(confirm("Waarschuwing: Wil je IEDEREEN uit deze kamer verwijderen?")) {
+            await window.dbApi.kickAllInKamer(kamerId);
+            this.showAlert("Kamer is leeggemaakt.", "info");
             this.renderReservaties();
         }
     }
@@ -538,17 +576,17 @@ class AdminApp {
             const userRes = (alleReservaties || []).filter(r => r.persoon_id === l.id && r.status === 'confirmed');
             let statusHtml;
             if (userRes.length >= 2) {
-                statusHtml = `<span class="px-2 py-1 bg-green-100 text-green-700 text-xs rounded font-bold">Volledig in orde</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium">In orde</span>`;
             } else if (userRes.length === 1) {
-                statusHtml = `<span class="px-2 py-1 bg-yellow-100 text-yellow-700 text-xs rounded font-bold">1 reservatie</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-yellow-50 text-yellow-700 text-xs rounded border border-yellow-200 font-medium">Deels in orde</span>`;
             } else {
-                statusHtml = `<span class="px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded font-bold">Nog niet</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-gray-50 text-gray-500 text-xs rounded border border-gray-200 font-medium">Nog niet</span>`;
             }
             const hasRes = userRes.length > 0;
 
             const geslachtTxt = l.geslacht ? (l.geslacht === 'M' ? 'Jongen' : 'Meisje') : '<span class="text-gray-400 italic text-xs">Onbekend</span>';
             const klasTxt = l.klas || '-';
-            const rolTxt = l.rol === 'LEERKRACHT' || l.rol === 'LK' ? '<span class="text-purple-600 font-bold text-xs bg-purple-50 px-2 py-1 rounded border border-purple-100">Leerkracht</span>' : '<span class="text-blue-600 font-medium text-xs">Leerling</span>';
+            const rolTxt = l.rol === 'LEERKRACHT' || l.rol === 'LK' ? '<span class="text-purple-600 font-medium text-xs bg-purple-50 px-2 py-1 rounded border border-purple-100">Leerkracht</span>' : '<span class="text-blue-600 font-medium text-xs">Leerling</span>';
 
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50';
@@ -559,11 +597,68 @@ class AdminApp {
                 <td class="p-3">${geslachtTxt}</td>
                 <td class="p-3">${statusHtml}</td>
                 <td class="p-3 text-right">
-                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-500 hover:underline font-medium">Sloop</button>` : '<span class="text-gray-400 text-xs italic">Beveiligd (Bezet)</span>'}
+                    <button onclick="window.adminApp.openEditLeerling(${l.id}, '${l.vnaam}', '${l.naam}', '${l.geslacht}', '${l.klas}')" class="text-blue-600 hover:underline mr-3 font-medium">Bewerk</button>
+                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-600 hover:underline font-medium">Verwijder</button>` : '<span class="text-gray-400 text-xs italic" title="Deze leerling heeft actieve reservaties">Bezet</span>'}
                 </td>
             `;
             tbody.appendChild(tr);
         });
+    }
+
+    openEditLeerling(id, vnaam, naam, geslacht, klas) {
+        this.editContext = { type: 'leerling', id: id };
+        document.getElementById('modalTitle').innerText = 'Leerling Aanpassen';
+        document.getElementById('modalFields').innerHTML = `
+            <div class="flex gap-2">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium mb-1">Voornaam</label>
+                    <input type="text" id="edit_modal_vnaam" value="${vnaam}" class="w-full p-2 border rounded">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-sm font-medium mb-1">Achternaam</label>
+                    <input type="text" id="edit_modal_naam" value="${naam}" class="w-full p-2 border rounded">
+                </div>
+            </div>
+            <div class="flex gap-2 mt-3">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium mb-1">Geslacht</label>
+                    <select id="edit_modal_geslacht" class="w-full p-2 border rounded bg-white">
+                        <option value="M" ${geslacht === 'M' ? 'selected' : ''}>Jongen (M)</option>
+                        <option value="V" ${geslacht === 'V' ? 'selected' : ''}>Meisje (V)</option>
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label class="block text-sm font-medium mb-1">Klas</label>
+                    <input type="text" id="edit_modal_klas" value="${klas !== 'null' ? klas : ''}" class="w-full p-2 border rounded">
+                </div>
+            </div>
+        `;
+        
+        // Zorg dat saveModal dit oppikt
+        const oldSave = this.saveModal.bind(this);
+        this.saveModal = async () => {
+            if(this.editContext && this.editContext.type === 'leerling') {
+                const vn = document.getElementById('edit_modal_vnaam').value;
+                const n = document.getElementById('edit_modal_naam').value;
+                const g = document.getElementById('edit_modal_geslacht').value;
+                const k = document.getElementById('edit_modal_klas').value;
+                
+                const res = await window.dbApi.updateLeerling(this.editContext.id, vn, n, g, k);
+                if(res.success) {
+                    this.showAlert("Leerling succesvol aangepast.", "success");
+                    this.closeModal();
+                    this.renderLeerlingen();
+                } else {
+                    this.showAlert("Fout bij aanpassen leerling.", "error");
+                }
+                // Restore original saveModal
+                this.saveModal = oldSave;
+            } else {
+                oldSave();
+            }
+        };
+        
+        document.getElementById('editModal').classList.remove('hidden');
     }
 
     handleCSVUpload() {
@@ -595,13 +690,13 @@ class AdminApp {
         const geslacht = document.getElementById('l_geslacht').value;
 
         await window.dbApi.addLeerling(vnaam, naam, geslacht);
-        this.showAlert("Leerling toegevoegd!", "success");
+        this.showAlert("Leerling toegevoegd.", "success");
         document.getElementById('addLeerlingForm').reset();
         this.renderLeerlingen();
     }
 
     async deleteLeerling(id) {
-        if(confirm("Leerling volledig verwijderen uit de database?")) {
+        if(confirm("Leerling volledig verwijderen uit het systeem?")) {
             const res = await window.dbApi.deleteLeerling(id);
             if(res.success) {
                 this.showAlert("Leerling verwijderd.", "info");
@@ -612,19 +707,18 @@ class AdminApp {
         }
     }
 
-    // --- ECHTE EXCEL (.xlsx) EXPORT LOGICA ---
+    // --- PROFESSIONELE EXCEL EXPORT ---
     async exportKamersExcel() {
         if (!window.ExcelJS) {
-            return this.showAlert("Excel bibliotheek is nog aan het inladen, probeer het zo nog eens.", "error");
+            return this.showAlert("Systeem is nog aan het laden, probeer het zo opnieuw.", "error");
         }
 
         const kamers = await window.dbApi.getAllKamersAdmin();
-        if (!kamers || kamers.length === 0) return this.showAlert("Er zijn geen kamers om te exporteren.", "error");
+        if (!kamers || kamers.length === 0) return this.showAlert("Er zijn geen gegevens om te exporteren.", "error");
 
-        this.showAlert("Excel-bestand wordt opgemaakt...", "info");
+        this.showAlert("Excel-export wordt voorbereid...", "info");
 
-        // We zoeken de eerste reis om als titel te gebruiken, of we gebruiken een standaard titel
-        const actieveReisNaam = this.reizen.length > 0 ? this.reizen[0].naam : "Kamerverdeling Overzicht";
+        const actieveReisNaam = this.reizen.length > 0 ? this.reizen[0].naam : "Export Kamerverdeling";
 
         const kamersPerHotel = {};
         this.hotels.forEach(h => kamersPerHotel[h.id] = { naam: h.naam, kamers: [] });
@@ -634,13 +728,13 @@ class AdminApp {
         const hotelIds = Object.keys(kamersPerHotel).filter(id => kamersPerHotel[id].kamers.length > 0);
 
         const workbook = new ExcelJS.Workbook();
-        const sheet = workbook.addWorksheet('Overzicht');
+        const sheet = workbook.addWorksheet('Kamerverdeling');
 
         sheet.mergeCells('A1:I2');
         const titleCell = sheet.getCell('A1');
         titleCell.value = actieveReisNaam.toUpperCase();
-        titleCell.font = { size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
-        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED8936' } };
+        titleCell.font = { size: 16, bold: true, color: { argb: 'FF1F2937' } };
+        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
         titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
 
         let rowTrackers = [4, 4]; 
@@ -653,17 +747,17 @@ class AdminApp {
             sheet.mergeCells(currentRow, colStart, currentRow, colStart + 3);
             const hTitle = sheet.getCell(currentRow, colStart);
             hTitle.value = kamersPerHotel[hotelId].naam;
-            hTitle.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
-            hTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A5568' } };
+            hTitle.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+            hTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } }; // Zakelijk donkergrijs
             hTitle.alignment = { horizontal: 'center' };
             currentRow++;
 
-            const headers = ['Kamer', 'Capaciteit', 'Bezet', 'Namen Leerlingen'];
+            const headers = ['Kamer', 'Cap.', 'Bezet', 'Namen Leerlingen'];
             headers.forEach((h, i) => {
                 const cell = sheet.getCell(currentRow, colStart + i);
                 cell.value = h;
-                cell.font = { bold: true };
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+                cell.font = { bold: true, color: { argb: 'FF4B5563' } };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE5E7EB' } };
                 cell.border = { bottom: { style: 'thin' } };
             });
             currentRow++;
@@ -672,13 +766,14 @@ class AdminApp {
                 const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : '?').join(', ');
                 const rowData = [ k.kamer_nr, k.capaciteit, k.bezet, namen ];
 
-                const bgColor = k.geslacht === 'M' ? 'FFBEE3F8' : 'FFFED7E2'; 
+                // Subtielere kleuren voor het onderscheid (Lichtblauw / Lichtgrijs-roze)
+                const bgColor = k.geslacht === 'M' ? 'FFE0F2FE' : 'FFFCE7F3'; 
 
                 rowData.forEach((val, i) => {
                     const cell = sheet.getCell(currentRow, colStart + i);
                     cell.value = val;
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
-                    cell.border = { bottom: { style: 'hair' }, right: { style: 'hair' }, left: {style: 'hair'}, top: {style: 'hair'} };
+                    cell.border = { bottom: { style: 'hair', color: { argb: 'FFD1D5DB' } } };
                     
                     if (i < 3) cell.alignment = { horizontal: 'center' };
                 });
@@ -690,40 +785,40 @@ class AdminApp {
         });
 
         sheet.getColumn(1).width = 12; 
-        sheet.getColumn(2).width = 10; 
-        sheet.getColumn(3).width = 10; 
-        sheet.getColumn(4).width = 40; 
+        sheet.getColumn(2).width = 8; 
+        sheet.getColumn(3).width = 8; 
+        sheet.getColumn(4).width = 45; 
         sheet.getColumn(5).width = 3;  
         sheet.getColumn(6).width = 12; 
-        sheet.getColumn(7).width = 10; 
-        sheet.getColumn(8).width = 10; 
-        sheet.getColumn(9).width = 40; 
+        sheet.getColumn(7).width = 8; 
+        sheet.getColumn(8).width = 8; 
+        sheet.getColumn(9).width = 45; 
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = `Kamerverdeling_${actieveReisNaam.replace(/\s+/g, '_')}.xlsx`;
+        link.download = `Export_${actieveReisNaam.replace(/\s+/g, '_')}.xlsx`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         
-        this.showAlert("Prachtig Excel-bestand succesvol gedownload!", "success");
+        this.showAlert("Excel-export succesvol voltooid.", "success");
     }
 
-    // --- INSTELLINGEN LOGICA ---
+    // --- INSTELLINGEN ---
     async changePassword() {
         const oldPw = document.getElementById('pw_old').value;
         const newPw = document.getElementById('pw_new').value;
         const confirmPw = document.getElementById('pw_confirm').value;
 
         if (newPw !== confirmPw) return this.showAlert('Nieuwe wachtwoorden komen niet overeen.', 'error');
-        if (newPw.length < 6) return this.showAlert('Minimaal 6 tekens vereist.', 'error');
+        if (newPw.length < 6) return this.showAlert('Het wachtwoord moet minimaal 6 tekens bevatten.', 'error');
 
         const success = await window.dbApi.updateTeacherPassword(oldPw, newPw);
         if (success) {
-            this.showAlert('Wachtwoord succesvol gewijzigd!', 'success');
+            this.showAlert('Wachtwoord succesvol gewijzigd.', 'success');
             document.getElementById('changePasswordForm').reset();
         } else {
             this.showAlert('Huidig wachtwoord is onjuist.', 'error');
@@ -732,7 +827,7 @@ class AdminApp {
 
     copyLink(link) {
         navigator.clipboard.writeText(link).then(() => {
-            this.showAlert("Link gekopieerd! Je kan deze nu plakken (bijv. in Smartschool).", "success");
+            this.showAlert("Link gekopieerd naar klembord.", "success");
         }).catch(err => {
             this.showAlert("Kon link niet kopiëren.", "error");
         });
