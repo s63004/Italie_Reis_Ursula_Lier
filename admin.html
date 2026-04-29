@@ -67,7 +67,7 @@
             <div id="content-reizen" class="hidden">
                 <h2 class="text-2xl font-bold mb-6 border-b pb-2">Hoofdreizen Beheren</h2>
                 
-                <p class="text-sm text-gray-500 mb-6">Maak hier de hoofd-reizen aan. Er kan er maar <strong>één tegelijk actief</strong> zijn. Kies een afbeelding vanaf je computer voor de inlogpagina.</p>
+                <p class="text-sm text-gray-500 mb-6">Maak hier de hoofd-reizen aan. Bedenk een logische, korte naam (slug) voor de weblink. Kies een afbeelding vanaf je computer voor de inlogpagina.</p>
 
                 <div class="bg-gray-50 p-4 rounded-lg mb-8 border border-gray-200">
                     <h3 class="font-semibold mb-3">Nieuwe Reis Toevoegen</h3>
@@ -77,8 +77,12 @@
                             <input type="text" id="r_naam" placeholder="Naam reis" class="border p-2 rounded w-48 bg-white" required>
                         </div>
                         <div>
+                            <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Unieke Slug (URL)</label>
+                            <input type="text" id="r_slug" placeholder="bv. italie-2026" class="border p-2 rounded w-40 bg-white" required>
+                        </div>
+                        <div>
                             <label class="block text-xs text-gray-500 uppercase font-bold mb-1">Inlog Foto Uploaden</label>
-                            <input type="file" id="r_foto" accept="image/*" class="border p-1.5 rounded w-64 bg-white" required>
+                            <input type="file" id="r_foto" accept="image/*" class="border p-1.5 rounded w-56 bg-white" required>
                         </div>
                         <button type="submit" class="bg-gray-900 text-white px-4 py-2 rounded hover:bg-gray-800 transition shadow-sm">Toevoegen</button>
                     </form>
@@ -88,10 +92,10 @@
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-gray-100 text-gray-600 text-sm">
-                                <th class="p-3 border-b w-16">ID</th>
                                 <th class="p-3 border-b">Reis Naam</th>
-                                <th class="p-3 border-b">Inlog Foto</th>
-                                <th class="p-3 border-b text-center">Actieve Reis?</th>
+                                <th class="p-3 border-b">Slug / Woordje</th>
+                                <th class="p-3 border-b">Link</th>
+                                <th class="p-3 border-b text-right">Acties</th>
                             </tr>
                         </thead>
                         <tbody id="reizenTableBody" class="text-sm"></tbody>
@@ -129,8 +133,8 @@
                             <tr class="bg-gray-100 text-gray-600 text-sm">
                                 <th class="p-3 border-b">Reis</th>
                                 <th class="p-3 border-b">Hotel Naam</th>
-                                <th class="p-3 border-b">Dashboard Foto</th>
-                                <th class="p-3 border-b text-center">Zichtbaar voor leerlingen?</th>
+                                <th class="p-3 border-b text-center">Zichtbaar?</th>
+                                <th class="p-3 border-b text-right">Acties</th>
                             </tr>
                         </thead>
                         <tbody id="bestemmingenTableBody" class="text-sm"></tbody>
@@ -140,6 +144,13 @@
 
             <div id="content-kamers" class="hidden">
                 <h2 class="text-2xl font-bold mb-6 border-b pb-2">Kamers Beheren</h2>
+
+                <div class="bg-blue-50 p-4 rounded-lg mb-6 border border-blue-200 flex justify-between items-center shadow-sm">
+                    <div>
+                        <label class="text-xs font-bold block mb-1 text-blue-800 uppercase">Toon alleen kamers van hotel:</label>
+                        <select id="filter_k_hotel" onchange="window.adminApp.renderKamers()" class="p-2 border rounded bg-white w-64"></select>
+                    </div>
+                </div>
                 
                 <div class="bg-gray-50 p-4 rounded-lg mb-8 border border-gray-200">
                     <h3 class="font-semibold mb-3">Nieuwe Kamer(s) Toevoegen</h3>
@@ -179,7 +190,7 @@
                                 <th class="p-3 border-b">Hotel/Bestemming</th>
                                 <th class="p-3 border-b">Geslacht</th>
                                 <th class="p-3 border-b">Capaciteit</th>
-                                <th class="p-3 border-b">Acties</th>
+                                <th class="p-3 border-b text-right">Acties</th>
                             </tr>
                         </thead>
                         <tbody id="kamersTableBody" class="text-sm"></tbody>
@@ -304,6 +315,17 @@
             <div class="flex justify-end gap-2">
                 <button onclick="document.getElementById('editKamerModal').classList.add('hidden')" class="px-4 py-2 bg-gray-100 rounded">Annuleren</button>
                 <button onclick="window.adminApp.saveKamerEdit()" class="px-4 py-2 bg-gray-900 text-white rounded">Opslaan</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editModal" class="fixed inset-0 bg-gray-900/60 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white p-6 rounded-xl shadow-xl w-full max-w-md">
+            <h3 id="modalTitle" class="text-xl font-bold mb-4">Aanpassen</h3>
+            <div id="modalFields" class="space-y-4"></div>
+            <div class="flex justify-end gap-2 mt-6">
+                <button onclick="window.adminApp.closeModal()" class="px-4 py-2 bg-gray-100 rounded hover:bg-gray-200 transition">Annuleren</button>
+                <button onclick="window.adminApp.saveModal()" class="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800 transition">Opslaan</button>
             </div>
         </div>
     </div>
