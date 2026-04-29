@@ -12,6 +12,7 @@ class AdminApp {
         this.currentTab = 'reizen'; 
         this.hotels = [];
         this.reizen = []; 
+        this.editContext = null; // Voor het generieke modal
         this.init();
     }
 
@@ -28,7 +29,7 @@ class AdminApp {
         this.hotels = await window.dbApi.getHotels(false);
         
         this.populateReisDropdown(); 
-        this.populateHotelDropdown();
+        this.populateHotelDropdowns(); // AANGEPAST: vult nu beide hotel dropdowns (toevoegen + filter)
 
         this.setTab(this.currentTab);
 
@@ -88,16 +89,38 @@ class AdminApp {
         });
     }
 
-    populateHotelDropdown() {
-        const select = document.getElementById('k_hotel');
-        if(!select) return;
-        select.innerHTML = '';
+    populateHotelDropdowns() {
+        const selectAdd = document.getElementById('k_hotel');
+        const selectFilter = document.getElementById('filter_k_hotel');
+        
+        if(selectAdd) selectAdd.innerHTML = '';
+        if(selectFilter) {
+            selectFilter.innerHTML = '';
+            // Voeg optie toe om alle hotels te tonen
+            const allOpt = document.createElement('option');
+            allOpt.value = "";
+            allOpt.innerText = "--- Toon alle hotels ---";
+            selectFilter.appendChild(allOpt);
+        }
+
         this.hotels.forEach(h => {
             const reisNaam = h.reis ? h.reis.naam : 'Geen Reis'; 
-            const opt = document.createElement('option');
-            opt.value = h.id;
-            opt.innerText = `${h.naam} (${reisNaam})`; 
-            select.appendChild(opt);
+            
+            // Voor het toevoegen van een kamer
+            if(selectAdd) {
+                const optAdd = document.createElement('option');
+                optAdd.value = h.id;
+                optAdd.innerText = `${h.naam} (${reisNaam})`; 
+                selectAdd.appendChild(optAdd);
+            }
+            
+            // Voor het filteren van kamers
+            if(selectFilter) {
+                const optFilter = document.createElement('option');
+                optFilter.value = h.id;
+                optFilter.innerText = `${h.naam} (${reisNaam})`; 
+                selectFilter.appendChild(optFilter);
+            }
         });
     }
 
@@ -139,7 +162,7 @@ class AdminApp {
         this.refreshCurrentTab();
     }
 
-    // --- REIZEN LOGICA (MET UPLOAD) ---
+    // --- REIZEN LOGICA (MET UPLOAD & EDIT/DELETE) ---
     async renderReizen() {
         const tbody = document.getElementById('reizenTableBody');
         if (!tbody) return;
@@ -150,21 +173,16 @@ class AdminApp {
         this.reizen.forEach(r => {
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50 transition';
-            const checkedState = r.is_actief ? 'checked' : '';
             
-            const bgHtml = r.login_bg.startsWith('http') 
-                ? `<a href="${r.login_bg}" target="_blank" class="text-blue-500 hover:underline">Bekijk Foto</a>` 
-                : `<span class="text-gray-400">${r.login_bg}</span>`;
+            const fullLink = `${window.location.origin}/login.html?reis=${r.slug}`;
 
             tr.innerHTML = `
-                <td class="p-3 text-gray-500">#${r.id}</td>
                 <td class="p-3 font-bold">${r.naam}</td>
-                <td class="p-3 text-xs">${bgHtml}</td>
-                <td class="p-3 text-center">
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" ${checkedState} onchange="window.adminApp.toggleReis(${r.id}, this.checked)" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-500 shadow-sm"></div>
-                    </label>
+                <td class="p-3 text-sm text-gray-500">${r.slug}</td>
+                <td class="p-3"><button onclick="window.adminApp.copyLink('${fullLink}')" class="text-xs bg-gray-100 hover:bg-gray-200 p-1.5 rounded border border-gray-300 transition">Kopieer Link</button></td>
+                <td class="p-3 text-right">
+                    <button onclick="window.adminApp.editReis(${r.id})" class="text-blue-600 hover:underline mr-3 font-medium">Bewerk</button>
+                    <button onclick="window.adminApp.deleteReis(${r.id})" class="text-red-600 hover:underline font-medium">Sloop</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -173,6 +191,7 @@ class AdminApp {
 
     async addReis() {
         const naam = document.getElementById('r_naam').value;
+        const slug = document.getElementById('r_slug').value;
         const fileInput = document.getElementById('r_foto');
         const file = fileInput.files[0];
         
@@ -183,142 +202,50 @@ class AdminApp {
         const uploadRes = await window.dbApi.uploadAfbeelding(file);
         if (!uploadRes.success) return this.showAlert("Fout bij het uploaden van de foto: " + uploadRes.message, "error");
 
-        const res = await window.dbApi.addReis(naam, uploadRes.url);
+        const res = await window.dbApi.addReis(naam, slug, uploadRes.url);
         
         if (res.success) {
             this.showAlert("Reis inclusief inlogfoto toegevoegd!", "success");
             document.getElementById('addReisForm').reset();
             await this.init(); 
         } else {
-            this.showAlert("Fout bij opslaan in database.", "error");
+            this.showAlert(res.message || "Fout bij opslaan in database.", "error");
         }
     }
 
-    async toggleReis(id, isActief) {
-        if (!isActief) {
-            this.showAlert("Er moet altijd een reis actief zijn om in te loggen.", "error");
-            this.renderReizen(); 
-            return;
+    async deleteReis(id) {
+        if(confirm("LET OP: Dit verwijdert de hele reis en ALLE hotels, kamers en reservaties die erbij horen! Zeker weten?")) {
+            const res = await window.dbApi.deleteReis(id);
+            if(res.success) {
+                this.showAlert("Reis verwijderd.", "info");
+                await this.init();
+            } else {
+                this.showAlert(res.message, "error");
+            }
         }
-        await window.dbApi.toggleReisActief(id, isActief);
-        this.showAlert("Actieve reis gewijzigd! Inlogscherm is geüpdatet.", "success");
-        this.renderReizen();
     }
 
-    // --- NIEUW: ECHTE EXCEL (.xlsx) EXPORT LOGICA ---
-    async exportKamersExcel() {
-        if (!window.ExcelJS) {
-            return this.showAlert("Excel bibliotheek is nog aan het inladen, probeer het zo nog eens.", "error");
-        }
-
-        const kamers = await window.dbApi.getAllKamersAdmin();
-        if (!kamers || kamers.length === 0) return this.showAlert("Er zijn geen kamers om te exporteren.", "error");
-
-        this.showAlert("Excel-bestand wordt opgemaakt...", "info");
-
-        // Haal de naam van de actieve reis op voor de titel
-        const actieveReizen = await window.dbApi.getReizen(true);
-        const actieveReisNaam = actieveReizen.length > 0 ? actieveReizen[0].naam : "Kamerverdeling Overzicht";
-
-        // Groepeer alle kamers netjes per Hotel
-        const kamersPerHotel = {};
-        this.hotels.forEach(h => kamersPerHotel[h.id] = { naam: h.naam, kamers: [] });
-        kamers.forEach(k => {
-            if (kamersPerHotel[k.hotelid]) kamersPerHotel[k.hotelid].kamers.push(k);
-        });
-        const hotelIds = Object.keys(kamersPerHotel).filter(id => kamersPerHotel[id].kamers.length > 0);
-
-        // Maak het Excel werkboek aan
-        const workbook = new ExcelJS.Workbook();
-        const sheet = workbook.addWorksheet('Overzicht');
-
-        // GROTE ORANJE TITEL BOVENAAN
-        sheet.mergeCells('A1:J2');
-        const titleCell = sheet.getCell('A1');
-        titleCell.value = actieveReisNaam.toUpperCase();
-        titleCell.font = { size: 18, bold: true, color: { argb: 'FFFFFFFF' } }; // Witte tekst
-        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED8936' } }; // Oranje achtergrond
-        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-
-        // We houden bij op welke Excel-rij we zitten aan de linker (0) en rechter (1) kant
-        let rowTrackers = [4, 4]; 
+    editReis(id) {
+        const r = this.reizen.find(x => x.id === id);
+        if(!r) return;
+        this.editContext = { type: 'reis', id: id };
         
-        hotelIds.forEach((hotelId, index) => {
-            const side = index % 2; // 0 = Links (kolom A), 1 = Rechts (kolom F)
-            let currentRow = rowTrackers[side];
-            const colStart = side === 0 ? 1 : 6; // Kolom A of Kolom F
-
-            // HOTEL TITEL BALK
-            sheet.mergeCells(currentRow, colStart, currentRow, colStart + 3);
-            const hTitle = sheet.getCell(currentRow, colStart);
-            hTitle.value = kamersPerHotel[hotelId].naam;
-            hTitle.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
-            hTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A5568' } }; // Donkergrijs
-            hTitle.alignment = { horizontal: 'center' };
-            currentRow++;
-
-            // TABEL KOPJES
-            const headers = ['Kamer', 'Capaciteit', 'Bezet', 'Namen Leerlingen'];
-            headers.forEach((h, i) => {
-                const cell = sheet.getCell(currentRow, colStart + i);
-                cell.value = h;
-                cell.font = { bold: true };
-                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } }; // Lichtgrijs
-                cell.border = { bottom: { style: 'thin' } };
-            });
-            currentRow++;
-
-            // TABEL RIJEN (KAMERS)
-            kamersPerHotel[hotelId].kamers.forEach(k => {
-                const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : '?').join(', ');
-                const rowData = [ k.kamer_nr, k.capaciteit, k.bezet, namen ];
-
-                // KLEUREN VOOR GESLACHT! (Blauw voor Jongens, Roze voor Meisjes)
-                const bgColor = k.geslacht === 'M' ? 'FFBEE3F8' : 'FFFED7E2'; 
-
-                rowData.forEach((val, i) => {
-                    const cell = sheet.getCell(currentRow, colStart + i);
-                    cell.value = val;
-                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
-                    cell.border = { bottom: { style: 'hair' }, right: { style: 'hair' }, left: {style: 'hair'}, top: {style: 'hair'} };
-                    
-                    if (i < 3) cell.alignment = { horizontal: 'center' }; // Cijfers in het midden
-                });
-                currentRow++;
-            });
-
-            currentRow += 2; // Extra witruimte na een hotel
-            rowTrackers[side] = currentRow; // Sla de rij op voor de volgende tabel aan deze kant
-        });
-
-        // Breedte van de kolommen mooi instellen
-        sheet.getColumn(1).width = 12; // A - Kamer Links
-        sheet.getColumn(2).width = 10; // B - Cap Links
-        sheet.getColumn(3).width = 10; // C - Bezet Links
-        sheet.getColumn(4).width = 40; // D - Namen Links
-
-        sheet.getColumn(5).width = 3;  // E - TUSSENRUIMTE
-
-        sheet.getColumn(6).width = 12; // F - Kamer Rechts
-        sheet.getColumn(7).width = 10; // G - Cap Rechts
-        sheet.getColumn(8).width = 10; // H - Bezet Rechts
-        sheet.getColumn(9).width = 40; // I - Namen Rechts
-
-        // Download het bestand naar de computer
-        const buffer = await workbook.xlsx.writeBuffer();
-        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `Kamerverdeling_${actieveReisNaam.replace(/\s+/g, '_')}.xlsx`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        this.showAlert("Prachtig Excel-bestand succesvol gedownload!", "success");
+        document.getElementById('modalTitle').innerText = 'Reis Aanpassen';
+        document.getElementById('modalFields').innerHTML = `
+            <div>
+                <label class="block text-sm font-medium mb-1">Naam</label>
+                <input type="text" id="edit_modal_naam" value="${r.naam}" class="w-full p-2 border rounded">
+            </div>
+            <div>
+                <label class="block text-sm font-medium mb-1">Unieke Slug</label>
+                <input type="text" id="edit_modal_slug" value="${r.slug}" class="w-full p-2 border rounded">
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Let op: Als je een nieuwe inlogfoto wilt, moet je de reis verwijderen en opnieuw toevoegen.</p>
+        `;
+        document.getElementById('editModal').classList.remove('hidden');
     }
 
-    // --- BESTEMMINGEN LOGICA (MET UPLOAD) ---
+    // --- BESTEMMINGEN LOGICA (MET UPLOAD & EDIT/DELETE) ---
     async renderBestemmingen() {
         const tbody = document.getElementById('bestemmingenTableBody');
         if (!tbody) return;
@@ -332,20 +259,19 @@ class AdminApp {
             
             const checkedState = h.is_actief ? 'checked' : '';
             const reisNaam = h.reis ? h.reis.naam : '<span class="text-red-500">Geen</span>'; 
-
-            const bgHtml = h.bg_image.startsWith('http') 
-                ? `<a href="${h.bg_image}" target="_blank" class="text-blue-500 hover:underline">Bekijk Foto</a>` 
-                : `<span class="text-gray-400">${h.bg_image}</span>`;
             
             tr.innerHTML = `
-                <td class="p-3 text-xs font-bold text-gray-500">${reisNaam}</td>
+                <td class="p-3 text-xs font-bold text-gray-500 uppercase">${reisNaam}</td>
                 <td class="p-3 font-bold">${h.naam}</td>
-                <td class="p-3 text-xs">${bgHtml}</td>
                 <td class="p-3 text-center">
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" ${checkedState} onchange="window.adminApp.toggleBestemming(${h.id}, this.checked)" class="sr-only peer">
                         <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500 shadow-sm"></div>
                     </label>
+                </td>
+                <td class="p-3 text-right">
+                    <button onclick="window.adminApp.editHotel(${h.id})" class="text-blue-600 hover:underline mr-3 font-medium">Bewerk</button>
+                    <button onclick="window.adminApp.deleteHotel(${h.id})" class="text-red-600 hover:underline font-medium">Sloop</button>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -368,48 +294,102 @@ class AdminApp {
         const res = await window.dbApi.addHotel(reis_id, naam, uploadRes.url); 
         
         if (res.success) {
-            this.hotels = await window.dbApi.getHotels(false);
-            this.populateHotelDropdown();
-            
             this.showAlert("Bestemming/Hotel en dashboardfoto toegevoegd!", "success");
-            const form = document.getElementById('addBestemmingForm');
-            if(form) form.reset();
-            this.renderBestemmingen();
+            document.getElementById('addBestemmingForm').reset();
+            await this.init();
         } else {
             this.showAlert("Er ging iets mis bij het toevoegen.", "error");
         }
     }
 
+    async deleteHotel(id) {
+        if(confirm("LET OP: Dit verwijdert het hotel en ALLE kamers erin! Zeker weten?")) {
+            const res = await window.dbApi.deleteHotel(id);
+            if(res.success) {
+                this.showAlert("Hotel verwijderd.", "info");
+                await this.init();
+            } else {
+                this.showAlert(res.message, "error");
+            }
+        }
+    }
+
+    editHotel(id) {
+        const h = this.hotels.find(x => x.id === id);
+        if(!h) return;
+        this.editContext = { type: 'hotel', id: id };
+        
+        document.getElementById('modalTitle').innerText = 'Hotel Aanpassen';
+        document.getElementById('modalFields').innerHTML = `
+            <div>
+                <label class="block text-sm font-medium mb-1">Hotel Naam</label>
+                <input type="text" id="edit_modal_naam" value="${h.naam}" class="w-full p-2 border rounded">
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Let op: Als je een nieuwe dashboardfoto wilt, moet je het hotel verwijderen en opnieuw toevoegen.</p>
+        `;
+        document.getElementById('editModal').classList.remove('hidden');
+    }
+
     async toggleBestemming(id, isActief) {
         await window.dbApi.toggleHotelActief(id, isActief);
         this.showAlert(isActief ? "Bestemming is nu zichtbaar!" : "Bestemming verborgen.", "info");
-        
         this.hotels = await window.dbApi.getHotels(false);
-        this.populateHotelDropdown();
+        this.populateHotelDropdowns();
     }
 
-    // --- KAMERS LOGICA ---
+    // --- GENERIEKE MODAL LOGICA ---
+    closeModal() {
+        document.getElementById('editModal').classList.add('hidden');
+        this.editContext = null;
+    }
+
+    async saveModal() {
+        if(!this.editContext) return;
+        
+        const naam = document.getElementById('edit_modal_naam').value;
+        
+        if (this.editContext.type === 'reis') {
+            const slug = document.getElementById('edit_modal_slug').value;
+            const res = await window.dbApi.updateReis(this.editContext.id, naam, slug);
+            if(res.success) this.showAlert("Reis succesvol aangepast.", "success");
+            else this.showAlert(res.message, "error");
+        } 
+        else if (this.editContext.type === 'hotel') {
+            const res = await window.dbApi.updateHotel(this.editContext.id, naam);
+            if(res.success) this.showAlert("Hotel succesvol aangepast.", "success");
+            else this.showAlert(res.message, "error");
+        }
+
+        this.closeModal();
+        await this.init();
+    }
+
+    // --- KAMERS LOGICA (MET FILTER) ---
     async renderKamers() {
         const tbody = document.getElementById('kamersTableBody');
         if (!tbody) return;
-        const kamers = await window.dbApi.getAllKamersAdmin();
+        
+        // Haal het geselecteerde hotel_id uit de filter dropdown
+        const filterEl = document.getElementById('filter_k_hotel');
+        const filterId = filterEl ? filterEl.value : null;
+
+        const kamers = await window.dbApi.getAllKamersAdmin(filterId);
         tbody.innerHTML = '';
 
         kamers.forEach(k => {
-            const hInfo = this.hotels.find(x => x.id === k.hotelid);
+            const hInfo = k.hotel;
             const hotelNaam = hInfo ? hInfo.naam : 'Onbekend';
 
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50';
             tr.innerHTML = `
-                <td class="p-3 text-gray-500">#${k.id}</td>
                 <td class="p-3 font-medium">${k.kamer_nr}</td>
-                <td class="p-3">${hotelNaam}</td>
+                <td class="p-3 text-gray-600">${hotelNaam}</td>
                 <td class="p-3">${k.geslacht === 'M' ? 'Jongens' : 'Meisjes'}</td>
                 <td class="p-3">${k.capaciteit} (Bezet: ${k.bezet})</td>
-                <td class="p-3">
+                <td class="p-3 text-right">
                     <button onclick="window.adminApp.openEditKamer(${k.id}, '${k.kamer_nr}', ${k.capaciteit}, '${k.geslacht}')" class="text-blue-500 hover:underline mr-3 font-medium">Bewerk</button>
-                    ${k.bezet === 0 ? `<button onclick="window.adminApp.deleteKamer(${k.id})" class="text-red-500 hover:underline font-medium">Verwijder</button>` : '<span class="text-gray-400 text-xs italic">Bezet</span>'}
+                    ${k.bezet === 0 ? `<button onclick="window.adminApp.deleteKamer(${k.id})" class="text-red-500 hover:underline font-medium">Sloop</button>` : '<span class="text-gray-400 text-xs italic">Bezet</span>'}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -486,7 +466,7 @@ class AdminApp {
     async renderReservaties() {
         const grid = document.getElementById('resGrid');
         if(!grid) return;
-        const kamers = await window.dbApi.getAllKamersAdmin();
+        const kamers = await window.dbApi.getAllKamersAdmin(); // Voor reservaties halen we alles op
         grid.innerHTML = '';
 
         const bezetteKamers = kamers.filter(k => k.bezet > 0);
@@ -497,7 +477,7 @@ class AdminApp {
         }
 
         bezetteKamers.forEach(k => {
-            const hInfo = this.hotels.find(x => x.id === k.hotelid);
+            const hInfo = k.hotel;
             const hotelNaam = hInfo ? hInfo.naam : 'Onbekend';
 
             const card = document.createElement('div');
@@ -574,8 +554,8 @@ class AdminApp {
                 <td class="p-3">${rolTxt}</td>
                 <td class="p-3">${geslachtTxt}</td>
                 <td class="p-3">${statusHtml}</td>
-                <td class="p-3">
-                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-500 hover:underline font-medium">Verwijder</button>` : '<span class="text-gray-400 text-xs italic">Beveiligd (Bezet)</span>'}
+                <td class="p-3 text-right">
+                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-500 hover:underline font-medium">Sloop</button>` : '<span class="text-gray-400 text-xs italic">Beveiligd</span>'}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -628,6 +608,106 @@ class AdminApp {
         }
     }
 
+    // --- ECHTE EXCEL (.xlsx) EXPORT LOGICA ---
+    async exportKamersExcel() {
+        if (!window.ExcelJS) {
+            return this.showAlert("Excel bibliotheek is nog aan het inladen, probeer het zo nog eens.", "error");
+        }
+
+        const kamers = await window.dbApi.getAllKamersAdmin();
+        if (!kamers || kamers.length === 0) return this.showAlert("Er zijn geen kamers om te exporteren.", "error");
+
+        this.showAlert("Excel-bestand wordt opgemaakt...", "info");
+
+        // We zoeken de eerste reis om als titel te gebruiken, of we gebruiken een standaard titel
+        const actieveReisNaam = this.reizen.length > 0 ? this.reizen[0].naam : "Kamerverdeling Overzicht";
+
+        const kamersPerHotel = {};
+        this.hotels.forEach(h => kamersPerHotel[h.id] = { naam: h.naam, kamers: [] });
+        kamers.forEach(k => {
+            if (kamersPerHotel[k.hotelid]) kamersPerHotel[k.hotelid].kamers.push(k);
+        });
+        const hotelIds = Object.keys(kamersPerHotel).filter(id => kamersPerHotel[id].kamers.length > 0);
+
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Overzicht');
+
+        sheet.mergeCells('A1:I2');
+        const titleCell = sheet.getCell('A1');
+        titleCell.value = actieveReisNaam.toUpperCase();
+        titleCell.font = { size: 18, bold: true, color: { argb: 'FFFFFFFF' } };
+        titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFED8936' } };
+        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+
+        let rowTrackers = [4, 4]; 
+        
+        hotelIds.forEach((hotelId, index) => {
+            const side = index % 2;
+            let currentRow = rowTrackers[side];
+            const colStart = side === 0 ? 1 : 6;
+
+            sheet.mergeCells(currentRow, colStart, currentRow, colStart + 3);
+            const hTitle = sheet.getCell(currentRow, colStart);
+            hTitle.value = kamersPerHotel[hotelId].naam;
+            hTitle.font = { size: 14, bold: true, color: { argb: 'FFFFFFFF' } };
+            hTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A5568' } };
+            hTitle.alignment = { horizontal: 'center' };
+            currentRow++;
+
+            const headers = ['Kamer', 'Capaciteit', 'Bezet', 'Namen Leerlingen'];
+            headers.forEach((h, i) => {
+                const cell = sheet.getCell(currentRow, colStart + i);
+                cell.value = h;
+                cell.font = { bold: true };
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+                cell.border = { bottom: { style: 'thin' } };
+            });
+            currentRow++;
+
+            kamersPerHotel[hotelId].kamers.forEach(k => {
+                const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : '?').join(', ');
+                const rowData = [ k.kamer_nr, k.capaciteit, k.bezet, namen ];
+
+                const bgColor = k.geslacht === 'M' ? 'FFBEE3F8' : 'FFFED7E2'; 
+
+                rowData.forEach((val, i) => {
+                    const cell = sheet.getCell(currentRow, colStart + i);
+                    cell.value = val;
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+                    cell.border = { bottom: { style: 'hair' }, right: { style: 'hair' }, left: {style: 'hair'}, top: {style: 'hair'} };
+                    
+                    if (i < 3) cell.alignment = { horizontal: 'center' };
+                });
+                currentRow++;
+            });
+
+            currentRow += 2; 
+            rowTrackers[side] = currentRow; 
+        });
+
+        sheet.getColumn(1).width = 12; 
+        sheet.getColumn(2).width = 10; 
+        sheet.getColumn(3).width = 10; 
+        sheet.getColumn(4).width = 40; 
+        sheet.getColumn(5).width = 3;  
+        sheet.getColumn(6).width = 12; 
+        sheet.getColumn(7).width = 10; 
+        sheet.getColumn(8).width = 10; 
+        sheet.getColumn(9).width = 40; 
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `Kamerverdeling_${actieveReisNaam.replace(/\s+/g, '_')}.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        this.showAlert("Prachtig Excel-bestand succesvol gedownload!", "success");
+    }
+
     // --- INSTELLINGEN LOGICA ---
     async changePassword() {
         const oldPw = document.getElementById('pw_old').value;
@@ -644,6 +724,14 @@ class AdminApp {
         } else {
             this.showAlert('Huidig wachtwoord is onjuist.', 'error');
         }
+    }
+
+    copyLink(link) {
+        navigator.clipboard.writeText(link).then(() => {
+            this.showAlert("Link gekopieerd! Je kan deze nu plakken (bijv. in Smartschool).", "success");
+        }).catch(err => {
+            this.showAlert("Kon link niet kopiëren.", "error");
+        });
     }
 
     logout() {
