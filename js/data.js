@@ -54,13 +54,11 @@ async function getAppSettings() {
     }, {});
 }
 
-// --- NIEUW: FOTO UPLOAD LOGICA ---
+// --- FOTO UPLOAD LOGICA ---
 async function uploadAfbeelding(file) {
-    // Maak een unieke naam zodat foto's met dezelfde naam elkaar niet overschrijven
     const fileExt = file.name.split('.').pop();
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
     
-    // Stuur de foto naar de 'afbeeldingen' bucket in Supabase Storage
     const { data, error } = await supabaseClient.storage
         .from('afbeeldingen')
         .upload(fileName, file, { cacheControl: '3600', upsert: false });
@@ -70,7 +68,6 @@ async function uploadAfbeelding(file) {
         return { success: false, message: error.message };
     }
     
-    // Haal de openbare URL op
     const { data: urlData } = supabaseClient.storage
         .from('afbeeldingen')
         .getPublicUrl(fileName);
@@ -78,7 +75,7 @@ async function uploadAfbeelding(file) {
     return { success: true, url: urlData.publicUrl };
 }
 
-// --- REIZEN LOGICA ---
+// --- REIZEN LOGICA (AANGEPAST VOOR SLUG & DELETE) ---
 async function getReizen(onlyActive = false) {
     let query = supabaseClient.from('reis').select('*').order('id');
     if (onlyActive) query = query.eq('is_actief', true);
@@ -88,11 +85,32 @@ async function getReizen(onlyActive = false) {
     return data || [];
 }
 
-async function addReis(naam, login_bg) {
-    await supabaseClient.from('reis').insert([{ naam, login_bg, is_actief: false }]);
+async function getReisBySlug(slug) {
+    const { data, error } = await supabaseClient.from('reis').select('*').eq('slug', slug).single();
+    if (error) console.error("Fout bij ophalen reis via slug", error);
+    return data;
+}
+
+async function addReis(naam, slug, login_bg) {
+    const { error } = await supabaseClient.from('reis').insert([{ naam, slug, login_bg, is_actief: false }]);
+    if (error) return { success: false, message: error.message };
+    
     const u = getCurrentUser();
     await writeLog('ADMIN_ADD_REIS', u.id, `Reis ${naam} toegevoegd`);
     return { success: true };
+}
+
+async function updateReis(id, naam, slug, login_bg) {
+    const updateData = { naam, slug };
+    if (login_bg) updateData.login_bg = login_bg;
+    
+    const { error } = await supabaseClient.from('reis').update(updateData).eq('id', id);
+    return { success: !error, message: error?.message };
+}
+
+async function deleteReis(id) {
+    const { error } = await supabaseClient.from('reis').delete().eq('id', id);
+    return { success: !error, message: error?.message };
 }
 
 async function toggleReisActief(id, is_actief) {
@@ -103,7 +121,7 @@ async function toggleReisActief(id, is_actief) {
     return { success: true };
 }
 
-// --- HOTELS LOGICA ---
+// --- HOTELS LOGICA (AANGEPAST VOOR DELETE) ---
 async function getHotels(onlyActive = false, reisId = null) {
     let query = supabaseClient.from('hotel').select('*, reis:reis_id(*)').order('id');
     if (onlyActive) query = query.eq('is_actief', true);
@@ -122,10 +140,18 @@ async function addHotel(reis_id, naam, bg_image) {
 }
 
 async function updateHotel(id, naam, bg_image) {
-    await supabaseClient.from('hotel').update({ naam, bg_image }).eq('id', id);
+    const updateData = { naam };
+    if (bg_image) updateData.bg_image = bg_image;
+
+    await supabaseClient.from('hotel').update(updateData).eq('id', id);
     const u = getCurrentUser();
     await writeLog('ADMIN_UPDATE_HOTEL', u.id, `Bestemming ${id} aangepast`);
     return { success: true };
+}
+
+async function deleteHotel(id) {
+    const { error } = await supabaseClient.from('hotel').delete().eq('id', id);
+    return { success: !error, message: error?.message };
 }
 
 async function toggleHotelActief(id, is_actief) {
@@ -330,8 +356,12 @@ async function updateTeacherPassword(oldPassword, newPassword) {
     } catch (e) { return false; }
 }
 
-async function getAllKamersAdmin() {
-    const { data: kamers } = await supabaseClient.from('kamer').select('*').order('id');
+// --- KAMERS LOGICA (AANGEPAST VOOR HOTEL FILTER) ---
+async function getAllKamersAdmin(hotelId = null) {
+    let query = supabaseClient.from('kamer').select('*').order('id');
+    if (hotelId) query = query.eq('hotel_id', hotelId); // Hier filteren we nu de kamers!
+    
+    const { data: kamers } = await query;
     const { data: reserveringen } = await supabaseClient.from('reservering').select('*, persoon:persoon_id(*)');
 
     if (!kamers) return [];
@@ -429,11 +459,13 @@ async function importCSVLeerlingen(csvText) {
     } catch (e) { return { success: false, message: "Er ging iets mis tijdens het verwerken van de CSV." }; }
 }
 
+// ALLE NIEUWE EN BESTAANDE FUNCTIES GEËXPORTEERD
 window.dbApi = {
     login, logout, getCurrentUser, initializeDB, getKamersMetStatus, reserveerPlek,
     bevestigReservatie, checkTimeouts, annuleerPending, searchStudent, searchStudentForLogin,
     syncServerTime, getEstimatedServerTime, verifyTeacherPassword, updateTeacherPassword,
     getAllKamersAdmin, addKamer, addMeerdereKamers, updateKamer, deleteKamer, removeReservatieAdmin,
-    getAllLeerlingen, addLeerling, deleteLeerling, importCSVLeerlingen, uploadAfbeelding, // TOEGEVOEGD
-    getAppSettings, getReizen, addReis, toggleReisActief, getHotels, addHotel, updateHotel, toggleHotelActief, supabaseClient
+    getAllLeerlingen, addLeerling, deleteLeerling, importCSVLeerlingen, uploadAfbeelding,
+    getAppSettings, getReizen, getReisBySlug, addReis, updateReis, deleteReis, toggleReisActief, 
+    getHotels, addHotel, updateHotel, deleteHotel, toggleHotelActief, supabaseClient
 };
