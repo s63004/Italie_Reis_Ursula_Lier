@@ -29,7 +29,7 @@ class AdminApp {
         this.hotels = await window.dbApi.getHotels(false);
         
         this.populateReisDropdown(); 
-        this.populateHotelDropdowns(); // AANGEPAST: vult nu beide hotel dropdowns (toevoegen + filter)
+        this.populateHotelDropdowns();
 
         this.setTab(this.currentTab);
 
@@ -170,11 +170,15 @@ class AdminApp {
         this.reizen = await window.dbApi.getReizen(false);
         tbody.innerHTML = '';
 
+        // Slimme truc om het GitHub Pages "mapje" (repository naam) te behouden
+        let baseUrl = window.location.href.split('admin.html')[0];
+
         this.reizen.forEach(r => {
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50 transition';
             
-            const fullLink = `${window.location.origin}/login.html?reis=${r.slug}`;
+            // Nu maken we de link met de correcte baseUrl
+            const fullLink = `${baseUrl}login.html?reis=${r.slug}`;
 
             tr.innerHTML = `
                 <td class="p-3 font-bold">${r.naam}</td>
@@ -555,7 +559,7 @@ class AdminApp {
                 <td class="p-3">${geslachtTxt}</td>
                 <td class="p-3">${statusHtml}</td>
                 <td class="p-3 text-right">
-                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-500 hover:underline font-medium">Sloop</button>` : '<span class="text-gray-400 text-xs italic">Beveiligd</span>'}
+                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-500 hover:underline font-medium">Sloop</button>` : '<span class="text-gray-400 text-xs italic">Beveiligd (Bezet)</span>'}
                 </td>
             `;
             tbody.appendChild(tr);
