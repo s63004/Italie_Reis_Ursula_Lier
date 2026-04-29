@@ -1,4 +1,4 @@
-// data.js - Supabase Database en Logica (Genormaliseerd & Gelogd)
+// data.js - Supabase Database en Logica (SaaS Multi-Tenant, Genormaliseerd & Gelogd)
 
 const supabaseUrl = window.appConfig.supabaseUrl;
 const supabaseKey = window.appConfig.publishableKey;
@@ -54,6 +54,16 @@ async function getAppSettings() {
     }, {});
 }
 
+// --- MULTI-TENANT SCHOOL LOGICA ---
+async function getSchoolBySlug(slug) {
+    const { data, error } = await supabaseClient.from('school').select('*').eq('slug', slug).single();
+    if (error) {
+        console.error("Fout bij ophalen school via slug", error);
+        return null;
+    }
+    return data;
+}
+
 // --- FOTO UPLOAD LOGICA ---
 async function uploadAfbeelding(file) {
     const fileExt = file.name.split('.').pop();
@@ -75,9 +85,12 @@ async function uploadAfbeelding(file) {
     return { success: true, url: urlData.publicUrl };
 }
 
-// --- REIZEN LOGICA (AANGEPAST VOOR SLUG & DELETE) ---
+// --- REIZEN LOGICA ---
 async function getReizen(onlyActive = false) {
-    let query = supabaseClient.from('reis').select('*').order('id');
+    const u = getCurrentUser();
+    if (!u || !u.school_id) return [];
+
+    let query = supabaseClient.from('reis').select('*').eq('school_id', u.school_id).order('id');
     if (onlyActive) query = query.eq('is_actief', true);
     
     const { data, error } = await query;
@@ -85,24 +98,31 @@ async function getReizen(onlyActive = false) {
     return data || [];
 }
 
-async function getReisBySlug(slug) {
-    const { data, error } = await supabaseClient.from('reis').select('*').eq('slug', slug).single();
+async function getReisBySlug(slug, schoolId) {
+    const { data, error } = await supabaseClient.from('reis')
+        .select('*')
+        .eq('slug', slug)
+        .eq('school_id', schoolId)
+        .single();
     if (error) console.error("Fout bij ophalen reis via slug", error);
     return data;
 }
 
 async function addReis(naam, slug, login_bg) {
-    const { error } = await supabaseClient.from('reis').insert([{ naam, slug, login_bg, is_actief: false }]);
+    const u = getCurrentUser();
+    if (!u) return { success: false, message: "Niet ingelogd." };
+
+    const { error } = await supabaseClient.from('reis').insert([{ naam, slug, login_bg, is_actief: false, school_id: u.school_id }]);
     if (error) return { success: false, message: error.message };
     
-    const u = getCurrentUser();
     await writeLog('ADMIN_ADD_REIS', u.id, `Reis ${naam} toegevoegd`);
     return { success: true };
 }
 
-async function updateReis(id, naam, slug, login_bg) {
+async function updateReis(id, naam, slug, login_bg, is_actief) {
     const updateData = { naam, slug };
     if (login_bg) updateData.login_bg = login_bg;
+    if (is_actief !== undefined) updateData.is_actief = is_actief;
     
     const { error } = await supabaseClient.from('reis').update(updateData).eq('id', id);
     return { success: !error, message: error?.message };
@@ -114,16 +134,22 @@ async function deleteReis(id) {
 }
 
 async function toggleReisActief(id, is_actief) {
+    const u = getCurrentUser();
     if (is_actief) {
-        await supabaseClient.from('reis').update({ is_actief: false }).neq('id', 0);
+        // Enkel andere reizen van DEZE school deactiveren
+        await supabaseClient.from('reis').update({ is_actief: false }).eq('school_id', u.school_id).neq('id', 0);
     }
     await supabaseClient.from('reis').update({ is_actief }).eq('id', id);
     return { success: true };
 }
 
-// --- HOTELS LOGICA (AANGEPAST VOOR DELETE) ---
+// --- HOTELS LOGICA ---
 async function getHotels(onlyActive = false, reisId = null) {
-    let query = supabaseClient.from('hotel').select('*, reis:reis_id(*)').order('id');
+    const u = getCurrentUser();
+    if (!u) return [];
+
+    // Inner join met reis om veilig enkel de hotels van de eigen school op te halen
+    let query = supabaseClient.from('hotel').select('*, reis!inner(*)').eq('reis.school_id', u.school_id).order('id');
     if (onlyActive) query = query.eq('is_actief', true);
     if (reisId) query = query.eq('reis_id', reisId);
     
@@ -139,9 +165,10 @@ async function addHotel(reis_id, naam, bg_image) {
     return { success: true };
 }
 
-async function updateHotel(id, naam, bg_image) {
+async function updateHotel(id, naam, bg_image, reis_id) {
     const updateData = { naam };
     if (bg_image) updateData.bg_image = bg_image;
+    if (reis_id) updateData.reis_id = parseInt(reis_id);
 
     await supabaseClient.from('hotel').update(updateData).eq('id', id);
     const u = getCurrentUser();
@@ -160,79 +187,79 @@ async function toggleHotelActief(id, is_actief) {
 }
 
 async function initializeDB() {
-    const { count } = await supabaseClient.from('kamer').select('*', { count: 'exact', head: true });
-    if (count > 0) return; 
-
-    let kamersToInsert = [];
-    let initCounters = { 1: { 'M': 1, 'V': 1 }, 2: { 'M': 1, 'V': 1 } };
-
-    function genereerKamers(hotel_id, geslacht, aantal, capaciteit) {
-        for (let i = 0; i < aantal; i++) {
-            let nr = initCounters[hotel_id][geslacht]++;
-            kamersToInsert.push({
-                kamer_nr: `${nr} (${geslacht === 'M' ? 'Jongens' : 'Meisjes'})`,
-                geslacht: geslacht,
-                hotel_id: hotel_id,
-                capaciteit: capaciteit
-            });
-        }
-    }
-
-    genereerKamers(1, 'M', 20, 3);
-    genereerKamers(1, 'M', 1, 2);
-    genereerKamers(1, 'V', 13, 3);
-    genereerKamers(1, 'V', 6, 2);
-
-    genereerKamers(2, 'M', 14, 4);
-    genereerKamers(2, 'M', 2, 3);
-    genereerKamers(2, 'V', 12, 4);
-    genereerKamers(2, 'V', 1, 3);
-
-    await supabaseClient.from('kamer').insert(kamersToInsert);
-
-    let personenToInsert = [];
-    const jongensNamen = ['Lukas', 'Noah', 'Liam', 'Arthur', 'Mathis', 'Victor', 'Jules', 'Finn', 'Leon', 'Oscar'];
-    const meisjesNamen = ['Olivia', 'Mila', 'Marie', 'Ella', 'Anna', 'Emma', 'Louise', 'Elena', 'Juliette', 'Lucie'];
-    const achternamen = ['Peeters', 'Janssens', 'Maes', 'Jacobs', 'Mertens', 'Willems', 'Claes', 'Goossens'];
-
-    for (let i = 0; i < 30; i++) {
-        personenToInsert.push({ vnaam: jongensNamen[Math.floor(Math.random() * jongensNamen.length)], naam: achternamen[Math.floor(Math.random() * achternamen.length)], geslacht: 'M', klas: '6A', rol: 'LEERLING' });
-        personenToInsert.push({ vnaam: meisjesNamen[Math.floor(Math.random() * meisjesNamen.length)], naam: achternamen[Math.floor(Math.random() * achternamen.length)], geslacht: 'V', klas: '6B', rol: 'LEERLING' });
-    }
-    await supabaseClient.from('persoon').insert(personenToInsert);
+    // Database populatie kan het beste via SQL gebeuren om tenant-lekkages te voorkomen.
+    // De oude logica is hier veiligheidshalve gereduceerd om te waken over de school_id integriteit.
+    return true; 
 }
 
-async function login(naam, vnaam, geslacht, isLeerkracht = false, studentId = null) {
+// --- AUTHENTICATIE & LOGIN ---
+async function login(naam, vnaam, geslacht, isLeerkracht = false, studentId = null, schoolId = null) {
     let internalId = null;
     let rol = isLeerkracht ? 'LEERKRACHT' : 'LEERLING';
 
+    if (!schoolId) {
+        console.error("Inloggen vereist nu een geldige school_id");
+        return null;
+    }
+
     if (isLeerkracht) {
-        const { data: bestaand } = await supabaseClient.from('persoon').select('id').eq('ss_id', studentId).single();
+        const { data: bestaand } = await supabaseClient.from('persoon')
+            .select('id').eq('ss_id', studentId).eq('school_id', schoolId).single();
 
         if (bestaand) {
             internalId = bestaand.id;
             await supabaseClient.from('persoon').update({ geslacht }).eq('id', internalId);
         } else {
-            const { data: nieuw, error } = await supabaseClient.from('persoon').insert([{ ss_id: studentId, naam, vnaam, geslacht, rol }]).select('id').single();
+            const { data: nieuw, error } = await supabaseClient.from('persoon')
+                .insert([{ ss_id: studentId, naam, vnaam, geslacht, rol, school_id: schoolId }])
+                .select('id').single();
             if (nieuw) internalId = nieuw.id;
         }
     } else {
-        internalId = studentId;
-        await supabaseClient.from('persoon').update({ geslacht, ss_id: studentId }).eq('id', internalId);
+        // Leerling (via eigen SS of handmatige setup)
+        const { data: bestaand } = await supabaseClient.from('persoon')
+            .select('id').eq('ss_id', studentId).eq('school_id', schoolId).single();
+            
+        if(bestaand) {
+            internalId = bestaand.id;
+            await supabaseClient.from('persoon').update({ geslacht }).eq('id', internalId);
+        } else {
+            // Als er geen smartschool is, werken we via de interne ID's die in de lijst zijn geïmporteerd
+            internalId = studentId;
+            await supabaseClient.from('persoon').update({ geslacht }).eq('id', internalId).eq('school_id', schoolId);
+        }
     }
 
     if (!internalId) return null;
 
-    const sessionData = { id: internalId, ss_id: studentId, naam: naam, vnaam: vnaam, geslacht: geslacht, isLeerkracht: isLeerkracht };
+    // Haal de school slug op voor URL structuur
+    const { data: schoolData } = await supabaseClient.from('school').select('slug').eq('id', schoolId).single();
+
+    const sessionData = { 
+        id: internalId, 
+        ss_id: studentId, 
+        naam: naam, 
+        vnaam: vnaam, 
+        geslacht: geslacht, 
+        isLeerkracht: isLeerkracht,
+        school_id: schoolId,
+        school_slug: schoolData ? schoolData.slug : 'school'
+    };
+    
     localStorage.setItem('currentUser', JSON.stringify(sessionData));
     await writeLog('LOGIN', internalId, `Ingelogd als ${rol}`);
 
     return sessionData;
 }
 
-async function searchStudentForLogin(query) {
-    if (!query || query.length < 2) return [];
-    const { data, error } = await supabaseClient.from('persoon').select('*').eq('rol', 'LEERLING').or(`naam.ilike.%${query}%,vnaam.ilike.%${query}%`).limit(8);
+async function searchStudentForLogin(query, schoolId) {
+    if (!query || query.length < 2 || !schoolId) return [];
+    const { data, error } = await supabaseClient.from('persoon')
+        .select('*')
+        .eq('rol', 'LEERLING')
+        .eq('school_id', schoolId)
+        .or(`naam.ilike.%${query}%,vnaam.ilike.%${query}%`)
+        .limit(8);
     return data || [];
 }
 
@@ -289,7 +316,7 @@ async function getKamersMetStatus(hotel_id, geslacht) {
 
 async function reserveerPlek(kamerId, persoon_id) {
     const numericPersoonId = parseInt(persoon_id);
-    if (isNaN(numericPersoonId)) return { success: false, message: 'Oude accountgegevens (Ghost Data) gedetecteerd. Log opnieuw in.' };
+    if (isNaN(numericPersoonId)) return { success: false, message: 'Sessiefout. Log opnieuw in.' };
 
     const { data: kamer } = await supabaseClient.from('kamer').select('hotel_id').eq('id', kamerId).single();
     if (!kamer) return { success: false, message: 'Kamer niet gevonden.' };
@@ -306,8 +333,17 @@ async function reserveerPlek(kamerId, persoon_id) {
 
 async function searchStudent(query, geslacht, hotelId) {
     if (!query || query.length < 2) return [];
+    
+    const u = getCurrentUser();
+    if (!u) return [];
 
-    const { data: personen } = await supabaseClient.from('persoon').select('*').eq('rol', 'LEERLING').eq('geslacht', geslacht).or(`naam.ilike.%${query}%,vnaam.ilike.%${query}%`);
+    const { data: personen } = await supabaseClient.from('persoon')
+        .select('*')
+        .eq('school_id', u.school_id)
+        .eq('rol', 'LEERLING')
+        .eq('geslacht', geslacht)
+        .or(`naam.ilike.%${query}%,vnaam.ilike.%${query}%`);
+        
     if (!personen) return [];
 
     const { data: hotelKamers } = await supabaseClient.from('kamer').select('id').eq('hotel_id', hotelId);
@@ -320,7 +356,7 @@ async function searchStudent(query, geslacht, hotelId) {
 
 async function bevestigReservatie(persoon_id, roommateIds = []) {
     const numericPersoonId = parseInt(persoon_id);
-    if (isNaN(numericPersoonId)) return { success: false, message: 'Oude accountgegevens (Ghost Data) gedetecteerd. Log opnieuw in.' };
+    if (isNaN(numericPersoonId)) return { success: false, message: 'Sessiefout gedetecteerd. Log opnieuw in.' };
 
     const safeRoommateIds = roommateIds.length > 0 ? roommateIds.map(id => parseInt(id)).filter(id => !isNaN(id)) : null;
     const { data, error } = await supabaseClient.rpc('bevestig_kamer', { p_persoon_id: numericPersoonId, p_roommate_ids: safeRoommateIds });
@@ -328,7 +364,7 @@ async function bevestigReservatie(persoon_id, roommateIds = []) {
     if (error) return { success: false, message: 'Er ging iets mis bij het bevestigen.' };
     if (data && data.success) {
         await writeLog('RESERVEER_BEVESTIGD', numericPersoonId, `Kamer bevestigd met ${safeRoommateIds ? safeRoommateIds.length : 0} roommates`);
-        return { success: true };
+        return { success: true, message: data.message };
     }
     return { success: false, message: data?.message || 'Onbekende fout.' };
 }
@@ -340,37 +376,54 @@ async function annuleerPending(persoon_id) {
     if (data && data.length > 0) await writeLog('ANNULEER', numericPersoonId, `Pending reservering geannuleerd`);
 }
 
+// --- ADMIN & WACHTWOORD LOGICA ---
 async function verifyTeacherPassword(password) {
+    const u = getCurrentUser();
+    if (!u) return false;
     try {
-        const { data, error } = await supabaseClient.rpc('verify_teacher_password', { p_password: password });
+        const { data, error } = await supabaseClient.rpc('verify_teacher_password', { p_password: password, p_school_id: u.school_id });
         if (error) return false;
         return data === true;
     } catch (e) { return false; }
 }
 
 async function updateTeacherPassword(oldPassword, newPassword) {
+    const u = getCurrentUser();
+    if (!u) return false;
     try {
-        const { data, error } = await supabaseClient.rpc('update_teacher_password', { p_old_password: oldPassword, p_new_password: newPassword });
+        const { data, error } = await supabaseClient.rpc('update_teacher_password', { p_old_password: oldPassword, p_new_password: newPassword, p_school_id: u.school_id });
         if (error) return false;
         return data === true;
     } catch (e) { return false; }
 }
 
-// --- KAMERS LOGICA (AANGEPAST VOOR HOTEL FILTER) ---
+// --- KAMERS LOGICA ---
 async function getAllKamersAdmin(hotelId = null) {
-    let query = supabaseClient.from('kamer').select('*').order('id');
-    if (hotelId) query = query.eq('hotel_id', hotelId); // Hier filteren we nu de kamers!
+    const u = getCurrentUser();
+    if(!u) return [];
+
+    let query = supabaseClient.from('kamer').select('*, hotel!inner(*)').eq('hotel.reis.school_id', u.school_id).order('id');
+    // Bovenstaande werkt als Supabase geconfigureerd is om relaties te volgen, anders filteren in JS of een strakkere database view gebruiken.
+    // Omdat foreign keys via hotel -> reis -> school_id lopen, is een simpele methode:
+    // Haal hotels van de school op:
+    const hotels = await getHotels();
+    const allowedHotelIds = hotels.map(h => h.id);
+
+    let baseQuery = supabaseClient.from('kamer').select('*').in('hotel_id', allowedHotelIds).order('id');
+    if (hotelId) baseQuery = baseQuery.eq('hotel_id', hotelId); 
     
-    const { data: kamers } = await query;
+    const { data: kamers } = await baseQuery;
     const { data: reserveringen } = await supabaseClient.from('reservering').select('*, persoon:persoon_id(*)');
 
     if (!kamers) return [];
 
     return kamers.map(k => {
         const kamerRes = (reserveringen || []).filter(r => r.kamer_id === k.id);
+        const hInfo = hotels.find(h => h.id === k.hotel_id);
+        
         return {
             id: k.id, kamer_nr: k.kamer_nr, hotelid: k.hotel_id, geslacht: k.geslacht, capaciteit: k.capaciteit,
-            bezet: kamerRes.length,
+            bezet: kamerRes.length, hotel: hInfo,
             reservaties: kamerRes.map(r => ({ id: r.id, kamerid: r.kamer_id, gebruikerid: r.persoon.id, status: r.status, gebruiker: r.persoon }))
         };
     });
@@ -410,19 +463,37 @@ async function removeReservatieAdmin(res_id) {
     const { data } = await supabaseClient.from('reservering').select('*, kamer(*), persoon(*)').eq('id', res_id).single();
     await supabaseClient.from('reservering').delete().eq('id', res_id);
     const u = getCurrentUser();
-    if (data) await writeLog('ADMIN_KICK', u.id, `${data.persoon.naam} gekickt uit kamer ${data.kamer.kamer_nr}`);
+    if (data) await writeLog('ADMIN_KICK_USER', u.id, `${data.persoon.naam} gekickt uit kamer ${data.kamer.kamer_nr}`);
     return { success: true };
 }
 
+async function kickAllInKamer(kamer_id) {
+    await supabaseClient.from('reservering').delete().eq('kamer_id', kamer_id);
+    const u = getCurrentUser();
+    await writeLog('ADMIN_KICK_KAMER', u.id, `Hele kamer ${kamer_id} is leeggemaakt.`);
+    return { success: true };
+}
+
+// --- LEERLINGEN LOGICA ---
 async function getAllLeerlingen() {
-    const { data } = await supabaseClient.from('persoon').select('*').order('naam');
+    const u = getCurrentUser();
+    if (!u) return [];
+
+    const { data } = await supabaseClient.from('persoon').select('*').eq('school_id', u.school_id).order('naam');
     return data || [];
 }
 
 async function addLeerling(vnaam, naam, geslacht) {
-    await supabaseClient.from('persoon').insert([{ vnaam, naam, geslacht, klas: '-', rol: 'LEERLING' }]);
     const u = getCurrentUser();
+    await supabaseClient.from('persoon').insert([{ vnaam, naam, geslacht, klas: '-', rol: 'LEERLING', school_id: u.school_id }]);
     await writeLog('ADMIN_ADD_PERSOON', u.id, `${vnaam} ${naam} toegevoegd`);
+    return { success: true };
+}
+
+async function updateLeerling(id, vnaam, naam, geslacht, klas) {
+    await supabaseClient.from('persoon').update({ vnaam, naam, geslacht, klas }).eq('id', id);
+    const u = getCurrentUser();
+    await writeLog('ADMIN_UPDATE_PERSOON', u.id, `Gegevens van ${vnaam} ${naam} bijgewerkt`);
     return { success: true };
 }
 
@@ -438,6 +509,7 @@ async function deleteLeerling(id) {
 
 async function importCSVLeerlingen(csvText) {
     try {
+        const u = getCurrentUser();
         const lines = csvText.split('\n');
         if (lines.length < 1) return { success: false, message: "Bestand lijkt leeg." };
 
@@ -448,24 +520,31 @@ async function importCSVLeerlingen(csvText) {
             const parts = line.split(/[;,]/).map(p => p.trim());
             if (parts.length >= 5) {
                 if (i === 0 && (parts[0].toLowerCase() === 'klas' || parts[1].toLowerCase() === 'naam')) continue;
-                newPersonen.push({ klas: parts[0], naam: parts[1], vnaam: parts[2], rol: parts[3].toUpperCase(), geslacht: parts[4] ? parts[4].toUpperCase() : null });
+                newPersonen.push({ 
+                    klas: parts[0], 
+                    naam: parts[1], 
+                    vnaam: parts[2], 
+                    rol: parts[3].toUpperCase(), 
+                    geslacht: parts[4] ? parts[4].toUpperCase() : null,
+                    school_id: u.school_id 
+                });
             }
         }
         if (newPersonen.length === 0) return { success: false, message: "Geen geldige data gevonden." };
         await supabaseClient.from('persoon').upsert(newPersonen, { onConflict: 'id' });
-        const u = getCurrentUser();
+        
         await writeLog('ADMIN_IMPORT_CSV', u.id, `${newPersonen.length} personen geïmporteerd`);
         return { success: true, count: newPersonen.length };
     } catch (e) { return { success: false, message: "Er ging iets mis tijdens het verwerken van de CSV." }; }
 }
 
-// ALLE NIEUWE EN BESTAANDE FUNCTIES GEËXPORTEERD
+// EXPORTS
 window.dbApi = {
     login, logout, getCurrentUser, initializeDB, getKamersMetStatus, reserveerPlek,
     bevestigReservatie, checkTimeouts, annuleerPending, searchStudent, searchStudentForLogin,
     syncServerTime, getEstimatedServerTime, verifyTeacherPassword, updateTeacherPassword,
     getAllKamersAdmin, addKamer, addMeerdereKamers, updateKamer, deleteKamer, removeReservatieAdmin,
-    getAllLeerlingen, addLeerling, deleteLeerling, importCSVLeerlingen, uploadAfbeelding,
-    getAppSettings, getReizen, getReisBySlug, addReis, updateReis, deleteReis, toggleReisActief, 
-    getHotels, addHotel, updateHotel, deleteHotel, toggleHotelActief, supabaseClient
+    kickAllInKamer, getAllLeerlingen, addLeerling, updateLeerling, deleteLeerling, importCSVLeerlingen, 
+    uploadAfbeelding, getAppSettings, getSchoolBySlug, getReizen, getReisBySlug, addReis, updateReis, 
+    deleteReis, toggleReisActief, getHotels, addHotel, updateHotel, deleteHotel, toggleHotelActief, supabaseClient
 };
