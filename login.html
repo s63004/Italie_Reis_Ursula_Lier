@@ -9,9 +9,12 @@
     <style>
         body {
             font-family: 'Inter', sans-serif;
-            background-image: url('vecteezy_colorful-village-of-manarola-in-cinque-terre-italy_33880836.jpg');
+            /* Standaard achtergrondkleur totdat de specifieke foto is geladen */
+            background-color: #1f2937; 
             background-size: cover;
             background-position: center;
+            background-attachment: fixed;
+            transition: background-image 0.5s ease-in-out;
         }
         .glass-panel {
             background: rgba(255, 255, 255, 0.2);
@@ -87,13 +90,42 @@
     <script src="js/data.js"></script>
 
     <script>
+        // De 'Slimme Voordeur': Check op URL parameter en laad de juiste reis
         document.addEventListener('DOMContentLoaded', async () => {
-            const settings = await window.dbApi.getAppSettings();
-            if (settings.app_title) {
-                document.getElementById('loginMainTitle').innerText = settings.app_title;
-                document.title = settings.app_title + " - Login";
+            const params = new URLSearchParams(window.location.search);
+            const slug = params.get('reis'); // Kijkt of er ?reis=... in de URL staat
+            
+            let reisData = null;
+
+            if (slug) {
+                // We zoeken de specifieke reis op basis van de link
+                reisData = await window.dbApi.getReisBySlug(slug);
+            } else {
+                // Geen link gebruikt? Dan pakken we de "Actieve" reis als terugvaloptie
+                const actieveReizen = await window.dbApi.getReizen(true); 
+                if (actieveReizen && actieveReizen.length > 0) {
+                    reisData = actieveReizen[0];
+                }
             }
-            if (settings.school_name) {
+
+            if (reisData) {
+                // 1. Verander de achtergrondfoto direct op de body
+                document.body.style.backgroundImage = `url('${reisData.login_bg}')`;
+                
+                // 2. Verander de titel op het scherm
+                document.getElementById('loginMainTitle').innerText = reisData.naam;
+                document.title = reisData.naam + " - Login";
+
+                // 3. SLA DE REIS OP IN HET RUGZAKJE (Extreem belangrijk voor de rest van de website)
+                localStorage.setItem('selected_trip_id', reisData.id);
+            } else {
+                document.getElementById('loginMainTitle').innerText = "Reis niet gevonden";
+                document.getElementById('loginSubTitle').innerText = "Vraag de juiste link aan je leerkracht.";
+            }
+
+            // Haal daarna de schoolnaam op uit de algemene instellingen
+            const settings = await window.dbApi.getAppSettings();
+            if (settings.school_name && reisData) {
                 document.getElementById('loginSubTitle').innerText = settings.school_name;
             }
         });
@@ -144,24 +176,6 @@
                 errorBox.classList.remove('hidden');
             }
         }
-    </script>
-    <script>
-        // Laad de actieve reis in zodra de pagina start
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Haal de actieve reis op uit de database
-            const reizen = await window.dbApi.getReizen(true); 
-            
-            if (reizen && reizen.length > 0) {
-                const actieveReis = reizen[0];
-                
-                // Pas de achtergrond aan
-                document.getElementById('bgImage').src = actieveReis.login_bg;
-                
-                // Pas eventueel de titel aan (als je die id='hoofdTitle' geeft in je HTML)
-                const titleEl = document.getElementById('hoofdTitle');
-                if (titleEl) titleEl.innerText = actieveReis.naam;
-            }
-        });
     </script>
 </body>
 </html>
