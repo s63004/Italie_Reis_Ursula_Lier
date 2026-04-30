@@ -40,48 +40,54 @@ class AdminApp {
 
         this.setTab(this.currentTab);
 
-        const addReisForm = document.getElementById('addReisForm');
-        if (addReisForm) {
-            addReisForm.addEventListener('submit', (e) => {
+        // NIEUW: Voorkom dubbele event listeners en realtime subscriptions (Lost de crash op)
+        if (!this._eventsAttached) {
+            const addReisForm = document.getElementById('addReisForm');
+            if (addReisForm) {
+                addReisForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.addReis();
+                });
+            }
+
+            document.getElementById('addKamerForm').addEventListener('submit', (e) => {
                 e.preventDefault();
-                this.addReis();
+                this.addKamer();
             });
-        }
 
-        document.getElementById('addKamerForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.addKamer();
-        });
-
-        document.getElementById('addLeerlingForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.addLeerling();
-        });
-
-        document.getElementById('changePasswordForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.changePassword();
-        });
-
-        const addBestemmingForm = document.getElementById('addBestemmingForm');
-        if (addBestemmingForm) {
-            addBestemmingForm.addEventListener('submit', (e) => {
+            document.getElementById('addLeerlingForm').addEventListener('submit', (e) => {
                 e.preventDefault();
-                this.addBestemming();
+                this.addLeerling();
             });
+
+            document.getElementById('changePasswordForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                this.changePassword();
+            });
+
+            const addBestemmingForm = document.getElementById('addBestemmingForm');
+            if (addBestemmingForm) {
+                addBestemmingForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.addBestemming();
+                });
+            }
+
+            const client = window.dbApi.supabaseClient;
+            client.channel('admin_realtime')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'reservering' }, () => this.refreshCurrentTab())
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'persoon' }, () => this.refreshCurrentTab())
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'kamer' }, () => this.refreshCurrentTab())
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'hotel' }, () => this.refreshCurrentTab())
+                .subscribe();
+
+            setInterval(() => {
+                if(this.user && !this.user.dummy) this.refreshCurrentTab();
+            }, 5000);
+
+            // Markeer als ingesteld
+            this._eventsAttached = true;
         }
-
-        const client = window.dbApi.supabaseClient;
-        client.channel('admin_realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'reservering' }, () => this.refreshCurrentTab())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'persoon' }, () => this.refreshCurrentTab())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'kamer' }, () => this.refreshCurrentTab())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'hotel' }, () => this.refreshCurrentTab())
-            .subscribe();
-
-        setInterval(() => {
-            if(this.user && !this.user.dummy) this.refreshCurrentTab();
-        }, 5000);
     }
 
     populateReisDropdown() {
@@ -312,7 +318,7 @@ class AdminApp {
             document.getElementById('addBestemmingForm').reset();
             await this.init();
         } else {
-            this.showAlert("Fout bij het toevoegen.", "error");
+            this.showAlert(res.message || "Fout bij het toevoegen.", "error");
         }
     }
 
@@ -835,9 +841,18 @@ class AdminApp {
         });
     }
 
+    // AANGEPAST: De uitlog functie bouwt nu een link om naar de juiste URL terug te keren
     logout() {
+        const user = this.user;
+        let redirectUrl = 'login.html';
+        
+        // Kijk of we de slugs in de sessie hebben opgeslagen
+        if (user && user.school_slug && user.reis_slug) {
+            redirectUrl = `login.html?school=${user.school_slug}&reis=${user.reis_slug}`;
+        }
+        
         window.dbApi.logout();
-        window.location.href = 'login.html';
+        window.location.href = redirectUrl;
     }
 
     showAlert(msg, type) {
