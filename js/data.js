@@ -158,8 +158,20 @@ async function getHotels(onlyActive = false, reisId = null) {
     return data || [];
 }
 
+// AANGEPAST: error handling toegevoegd
 async function addHotel(reis_id, naam, bg_image) {
-    await supabaseClient.from('hotel').insert([{ reis_id: parseInt(reis_id), naam, bg_image, is_actief: false }]);
+    const { data, error } = await supabaseClient.from('hotel').insert([{ 
+        reis_id: parseInt(reis_id), 
+        naam, 
+        bg_image, 
+        is_actief: false 
+    }]);
+
+    if (error) {
+        console.error("Fout bij toevoegen hotel:", error);
+        return { success: false, message: error.message };
+    }
+
     const u = getCurrentUser();
     await writeLog('ADMIN_ADD_HOTEL', u.id, `Hotel ${naam} toegevoegd aan reis ${reis_id}`);
     return { success: true };
