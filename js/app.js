@@ -1,4 +1,4 @@
-// app.js - Core Frontend Logica (Geprofessionaliseerd)
+// app.js - Core Frontend Logica (Inschrijfsysteem met Animaties & Klas-integratie)
 
 class App {
     constructor() {
@@ -12,6 +12,9 @@ class App {
         this.currentHotelId = null;
         this.roommateSearchQuery = {};
         this.selectedRoommates = {};
+        
+        // Nieuwe instelling voor groepsboekingen
+        this.sta_groepjes_toe = true; 
 
         // TIMER STATE
         this._lockStartServerMs = null;
@@ -22,23 +25,32 @@ class App {
     }
 
     async init() {
-        document.getElementById('userInfo').innerText = `${this.user.vnaam} ${this.user.naam} (${this.user.geslacht === 'M' ? 'Jongen' : 'Meisje'})`;
+        // --- SLIMME DATA-CHECK ---
+        if (this.user && (!this.user.reis_naam || !this.user.school_naam)) {
+            console.log("Data in sessie incompleet, database wordt geraadpleegd...");
+            const { data: sData } = await window.dbApi.supabaseClient.from('school').select('naam, slug').eq('id', this.user.school_id).maybeSingle();
+            const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('naam, slug, sta_groepjes_toe').eq('id', this.user.reis_id).maybeSingle();
+            if(sData) this.user.school_naam = sData.naam;
+            if(rData) {
+                this.user.reis_naam = rData.naam;
+                this.sta_groepjes_toe = rData.sta_groepjes_toe !== false; // Zet op false als database dat zegt
+            }
+            localStorage.setItem('currentUser', JSON.stringify(this.user));
+        } else {
+            // Check toch even de groepjes-instelling als de sessie er al was
+            const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('sta_groepjes_toe').eq('id', this.user.reis_id).maybeSingle();
+            if(rData) this.sta_groepjes_toe = rData.sta_groepjes_toe !== false;
+        }
+
+        document.getElementById('userInfo').innerText = `${this.user.vnaam} ${this.user.naam}`;
+        
+        if (document.getElementById('navTitle')) document.getElementById('navTitle').innerText = this.user.reis_naam || 'Reservering';
+        if (document.getElementById('schoolSubTitle')) document.getElementById('schoolSubTitle').innerText = this.user.school_naam || '';
+        if (document.getElementById('pageTitle')) document.title = (this.user.reis_naam || 'Reserveringen') + " - Overzicht";
 
         await window.dbApi.initializeDB();
         await window.dbApi.syncServerTime();
 
-        // AANGEPAST: Titels vullen op basis van de ingelogde sessie-informatie
-        if (document.getElementById('navTitle')) {
-            document.getElementById('navTitle').innerText = this.user.reis_naam || 'Kamerverdeling';
-        }
-        if (document.getElementById('schoolSubTitle')) {
-            document.getElementById('schoolSubTitle').innerText = this.user.school_naam || '';
-        }
-        if (document.getElementById('pageTitle')) {
-            document.title = (this.user.reis_naam || 'Kamerverdeling') + " - Overzicht";
-        }
-
-        // AANGEPAST: Haalt enkel de bestemmingen op voor de huidige actieve REIS (filter op reis_id)
         this.hotels = await window.dbApi.getHotels(true, this.user.reis_id);
         if (this.hotels.length > 0) {
             this.currentHotelId = this.hotels[0].id;
@@ -143,6 +155,46 @@ class App {
         this.render(true); 
     }
 
+    // --- NIEUW: De Zwevende Bevestigings-Modal ---
+    showConfirmModal(kamerNr, onConfirmCallback) {
+        const modalId = 'confirmModal_' + Date.now();
+        const modalHtml = `
+            <div id="${modalId}" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm opacity-0 transition-opacity duration-300">
+                <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform duration-300 mx-4">
+                    <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mb-4 text-xl mx-auto">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    </div>
+                    <h3 class="text-xl font-bold text-center text-slate-800 mb-2">Kamer ${kamerNr} bevestigen?</h3>
+                    <p class="text-center text-slate-500 text-sm mb-6">Je keuze is definitief en kan later niet aangepast worden.</p>
+                    <div class="flex gap-3">
+                        <button id="btnCancel_${modalId}" class="flex-1 bg-white border border-slate-300 text-slate-700 font-medium py-2.5 rounded-xl hover:bg-slate-50 transition text-sm">Nee, terug</button>
+                        <button id="btnYes_${modalId}" class="flex-1 bg-orange-500 text-white font-medium py-2.5 rounded-xl hover:bg-orange-600 transition shadow-md shadow-orange-500/20 text-sm">Ja, definitief bevestigen</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = document.getElementById(modalId);
+        
+        setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            modal.firstElementChild.classList.remove('scale-95');
+        }, 10);
+
+        document.getElementById(`btnCancel_${modalId}`).onclick = () => {
+            modal.classList.add('opacity-0');
+            modal.firstElementChild.classList.add('scale-95');
+            setTimeout(() => modal.remove(), 300);
+        };
+
+        document.getElementById(`btnYes_${modalId}`).onclick = () => {
+            modal.classList.add('opacity-0');
+            modal.firstElementChild.classList.add('scale-95');
+            setTimeout(() => modal.remove(), 300);
+            onConfirmCallback();
+        };
+    }
+
     async render(force = false) {
         const isTyping = document.activeElement && document.activeElement.tagName === 'INPUT';
         if (isTyping && !force) return;
@@ -161,7 +213,6 @@ class App {
         const hasPending = userRes && userRes.status === 'pending';
         const hasConfirmed = userRes && userRes.status === 'confirmed';
 
-        // Professionele, rustige kleuren voor avatars
         const getAvatarStyle = (name) => {
             const colors = ['#3b82f6', '#10b981', '#6366f1', '#0ea5e9', '#14b8a6', '#64748b'];
             let hash = 0;
@@ -185,7 +236,7 @@ class App {
         const activeElementId = document.activeElement ? document.activeElement.id : null;
         container.innerHTML = '';
 
-        kamers.forEach(kamer => {
+        kamers.forEach((kamer, index) => {
             const isFull = kamer.vrij <= 0;
             const isUserRoom = userRes && userRes.kamerid === kamer.id;
             const isThisPending = isUserRoom && userRes.status === 'pending';
@@ -197,7 +248,6 @@ class App {
             let cardClasses = `kamer-card bg-white rounded-xl p-5 border border-gray-200 relative overflow-visible shadow-sm `;
 
             if (isThisPending) {
-                // Focus styling: strak en prominent zonder agressief te zijn
                 cardClasses = `fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-md z-50 bg-white rounded-xl p-6 border border-blue-200 ring-4 ring-blue-50 shadow-2xl transition-all duration-300`;
             } else if (isUserRoom && userRes.status === 'confirmed') {
                 cardClasses += `border-green-400 border-[1.5px] shadow-green-50 ring-2 ring-green-50`;
@@ -207,6 +257,10 @@ class App {
 
             const card = document.createElement('div');
             card.className = cardClasses;
+            
+            if (!isThisPending) {
+                card.style.animationDelay = `${index * 0.05}s`;
+            }
 
             let timerHtml = '';
             if (isThisPending) {
@@ -218,7 +272,7 @@ class App {
             if (lockedByOther) {
                 frozenOverlay = `
                     <div class="frozen-overlay absolute inset-0 bg-white/40 backdrop-blur-[1px] rounded-xl z-10 flex flex-col items-center justify-center gap-2 pointer-events-none">
-                        <span class="text-xs font-medium text-gray-600 bg-white px-3 py-1.5 rounded-md border border-gray-200 shadow-sm">Kamer in bewerking...</span>
+                        <span class="text-xs font-medium text-gray-600 bg-white px-3 py-1.5 rounded-md border border-gray-200 shadow-sm">Plaats in bewerking...</span>
                     </div>`;
             }
 
@@ -228,7 +282,7 @@ class App {
             let headerHtml = `
                 <div class="flex justify-between items-start mb-3">
                     <div>
-                        <h3 class="text-lg font-bold text-gray-900 tracking-tight">Kamer ${kamer.kamer_nr}</h3>
+                        <h3 class="text-lg font-bold text-gray-900 tracking-tight">${kamer.kamer_nr}</h3>
                         <p class="text-xs text-gray-500 mt-1 uppercase tracking-wider font-medium flex items-center gap-1">
                             <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd"></path></svg>
                             ${hotelNaam}
@@ -247,13 +301,16 @@ class App {
             kamer.reservaties.forEach(r => {
                 const isMe = r.gebruiker.id === this.user.id;
                 let statusBadge = r.status === 'confirmed' ? '<svg class="w-4 h-4 text-green-500 ml-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>' : '';
+                
+                // NIEUW: De klas ophalen als we die hebben
+                const klasTxt = r.gebruiker.klas && r.gebruiker.klas !== 'null' ? r.gebruiker.klas : '-';
 
                 lijstHtml += `
                     <li class="flex items-center text-sm ${isMe ? 'font-semibold text-blue-900 bg-blue-50 p-2 rounded-lg border border-blue-100' : 'text-gray-700 p-2 bg-gray-50 rounded-lg border border-gray-100'}">
                         <div class="w-7 h-7 rounded-full flex items-center justify-center mr-3 text-xs font-semibold" style="${getAvatarStyle(r.gebruiker.vnaam)}">
                             ${r.gebruiker.vnaam.charAt(0)}${r.gebruiker.naam.charAt(0)}
                         </div>
-                        ${r.gebruiker.vnaam} ${r.gebruiker.naam} ${isMe && isThisPending ? '<span class="ml-2 text-xs text-blue-500">(Jij)</span>' : statusBadge}
+                        ${r.gebruiker.vnaam} ${r.gebruiker.naam} <span class="text-xs text-gray-400 ml-1 font-normal">(${klasTxt})</span> ${isMe && isThisPending ? '<span class="ml-2 text-xs text-blue-500">(Jij)</span>' : statusBadge}
                     </li>
                 `;
             });
@@ -262,33 +319,47 @@ class App {
 
             for (let i = 0; i < kamer.vrij; i++) {
                 if (isThisPending) {
-                    const slotVal = this.roommateSearchQuery[i] || '';
-                    const selected = this.selectedRoommates[i];
-
-                    if (selected) {
+                    
+                    // Als groepjes toestaan is uitgevinkt, laten we GEEN zoekbalk zien!
+                    if (this.sta_groepjes_toe === false) {
                         lijstHtml += `
-                            <li class="flex items-center text-sm bg-slate-50 p-2 rounded-lg border border-slate-200 relative transition-all">
-                                <div class="w-7 h-7 rounded-full flex items-center justify-center mr-3 text-xs font-semibold" style="${getAvatarStyle(selected.vnaam)}">
-                                    ${selected.vnaam.charAt(0)}
+                            <li class="flex items-center text-sm text-gray-500 p-2 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                                <div class="w-7 h-7 rounded-full bg-white border border-gray-100 flex items-center justify-center mr-3">
+                                    ${bedIcon}
                                 </div>
-                                <span class="font-medium text-slate-800">${selected.vnaam} ${selected.naam}</span>
-                                <button onclick="window.app.removeRoommate(${i})" class="absolute right-2 text-gray-400 hover:text-red-500 p-1 transition" title="Verwijder">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                </button>
+                                <span class="font-medium text-xs">Vrije plaats</span>
                             </li>
                         `;
                     } else {
-                        lijstHtml += `
-                            <li class="relative">
-                                <div class="flex items-center bg-white rounded-lg p-1.5 border border-gray-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
-                                    <div class="w-7 h-7 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center mr-2 shrink-0 text-gray-400">
-                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        // Wel groepjes toestaan = zoekbalk
+                        const slotVal = this.roommateSearchQuery[i] || '';
+                        const selected = this.selectedRoommates[i];
+
+                        if (selected) {
+                            lijstHtml += `
+                                <li class="flex items-center text-sm bg-slate-50 p-2 rounded-lg border border-slate-200 relative transition-all">
+                                    <div class="w-7 h-7 rounded-full flex items-center justify-center mr-3 text-xs font-semibold" style="${getAvatarStyle(selected.vnaam)}">
+                                        ${selected.vnaam.charAt(0)}
                                     </div>
-                                    <input type="text" id="search-slot-${i}" placeholder="Zoek medeleerling..." value="${slotVal}" onkeyup="window.app.handleSearch(event, ${i})" class="w-full text-sm p-1 bg-transparent border-none focus:outline-none focus:ring-0 text-gray-800">
-                                </div>
-                                <div id="dropdown-${i}" class="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden max-h-48 overflow-y-auto"></div>
-                            </li>
-                        `;
+                                    <span class="font-medium text-slate-800">${selected.vnaam} ${selected.naam} <span class="text-xs text-gray-400 font-normal">(${selected.klas})</span></span>
+                                    <button onclick="window.app.removeRoommate(${i})" class="absolute right-2 text-gray-400 hover:text-red-500 p-1 transition" title="Verwijder">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                    </button>
+                                </li>
+                            `;
+                        } else {
+                            lijstHtml += `
+                                <li class="relative">
+                                    <div class="flex items-center bg-white rounded-lg p-1.5 border border-gray-300 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                                        <div class="w-7 h-7 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center mr-2 shrink-0 text-gray-400">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                                        </div>
+                                        <input type="text" id="search-slot-${i}" placeholder="Zoek medeleerling..." value="${slotVal}" onkeyup="window.app.handleSearch(event, ${i})" class="w-full text-sm p-1 bg-transparent border-none focus:outline-none focus:ring-0 text-gray-800">
+                                    </div>
+                                    <div id="dropdown-${i}" class="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg hidden max-h-48 overflow-y-auto"></div>
+                                </li>
+                            `;
+                        }
                     }
                 } else {
                     lijstHtml += `
@@ -308,13 +379,13 @@ class App {
                 buttonHtml = `
                     <div class="flex gap-2 mt-auto pt-4 border-t border-gray-100">
                         <button onclick="window.app.annuleer()" class="w-1/3 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium py-2.5 rounded-lg transition text-sm">Annuleren</button>
-                        <button onclick="window.app.bevestig()" class="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition text-sm shadow-sm">Bevestigen</button>
+                        <button onclick="window.app.promptBevestig('${kamer.kamer_nr}')" class="w-2/3 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition text-sm shadow-sm">Bevestigen</button>
                     </div>
                 `;
             } else if (isUserRoom && userRes.status === 'confirmed') {
                 buttonHtml = `<button disabled class="w-full mt-auto bg-green-50 text-green-700 font-medium py-2.5 rounded-lg border border-green-200 text-sm cursor-default flex items-center justify-center gap-2">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                    Jouw Kamer
+                    Jouw Plaats
                 </button>`;
             } else if (lockedByOther) {
                 buttonHtml = `<button disabled class="w-full mt-auto bg-gray-100 text-gray-400 font-medium py-2.5 rounded-lg border border-gray-200 text-sm cursor-not-allowed flex items-center justify-center gap-2">
@@ -323,8 +394,8 @@ class App {
             } else if (hasPending || hasConfirmed) {
                 buttonHtml = `<button disabled class="w-full mt-auto bg-gray-50 text-gray-400 font-medium py-2.5 rounded-lg border border-gray-100 text-sm cursor-not-allowed">Geen actie mogelijk</button>`;
             } else if (!isFull) {
-                buttonHtml = `<button onclick="window.app.join(${kamer.id})" class="w-full mt-auto bg-white border border-blue-200 hover:border-blue-600 hover:bg-blue-50 text-blue-600 font-medium py-2.5 rounded-lg transition-all duration-200 text-sm flex items-center justify-center gap-2">
-                    Kies deze kamer
+                buttonHtml = `<button onclick="window.app.promptJoin(${kamer.id}, '${kamer.kamer_nr}')" class="w-full mt-auto bg-white border border-blue-200 hover:border-blue-600 hover:bg-blue-50 text-blue-600 font-medium py-2.5 rounded-lg transition-all duration-200 text-sm flex items-center justify-center gap-2">
+                    Kies deze plaats
                 </button>`;
             } else {
                 buttonHtml = `<button disabled class="w-full mt-auto bg-gray-50 text-gray-400 font-medium py-2.5 rounded-lg border border-gray-200 text-sm cursor-not-allowed">Volzet</button>`;
@@ -358,7 +429,7 @@ class App {
         const results = await window.dbApi.searchStudent(query, this.user.geslacht, this.currentHotelId);
 
         if (results.length === 0) {
-            dropdown.innerHTML = `<div class="p-3 text-sm text-gray-500">Geen beschikbare leerlingen gevonden.</div>`;
+            dropdown.innerHTML = `<div class="p-3 text-sm text-gray-500">Geen beschikbare personen gevonden.</div>`;
             dropdown.classList.remove('hidden');
             return;
         }
@@ -367,11 +438,12 @@ class App {
         results.forEach(student => {
             const isAlreadySelected = Object.values(this.selectedRoommates).find(s => s.id === student.id);
             if (!isAlreadySelected) {
+                const klasTxt = student.klas && student.klas !== 'null' ? student.klas : '-';
                 html += `
-                    <div onclick="window.app.selectRoommate(${slotIndex}, '${student.id}', '${student.vnaam}', '${student.naam}')"
+                    <div onclick="window.app.selectRoommate(${slotIndex}, '${student.id}', '${student.vnaam}', '${student.naam}', '${klasTxt}')"
                          class="p-2 hover:bg-slate-50 cursor-pointer border-b border-gray-100 last:border-b-0 text-sm flex items-center text-gray-700">
                         <div class="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mr-2 text-xs font-medium">${student.vnaam.charAt(0)}</div>
-                        ${student.vnaam} ${student.naam}
+                        ${student.vnaam} ${student.naam} <span class="text-xs text-gray-400 ml-1">(${klasTxt})</span>
                     </div>
                 `;
             }
@@ -385,8 +457,8 @@ class App {
         dropdown.classList.remove('hidden');
     }
 
-    selectRoommate(slotIndex, id, vnaam, naam) {
-        this.selectedRoommates[slotIndex] = { id, vnaam, naam };
+    selectRoommate(slotIndex, id, vnaam, naam, klas) {
+        this.selectedRoommates[slotIndex] = { id, vnaam, naam, klas };
         this.roommateSearchQuery[slotIndex] = '';
         this.render(true); 
     }
@@ -396,13 +468,33 @@ class App {
         this.render(true); 
     }
 
+    // NIEUW: Checkt eerst via het Modal venster voordat we de backend aanroepen (Voor als groepjes uit staan)
+    async promptJoin(kamerId, kamerNr) {
+        if (this.sta_groepjes_toe === false) {
+            // Groepjes uit = De keuze is direct definitief! Toon modal.
+            this.showConfirmModal(kamerNr, () => this.join(kamerId));
+        } else {
+            // Normale verloop
+            this.join(kamerId);
+        }
+    }
+
+    // Wordt aangeroepen na "Bevestigen" vanuit de Timer/Pending blok (Voor als groepjes wel aan staan)
+    async promptBevestig(kamerNr) {
+        this.showConfirmModal(kamerNr, () => this.bevestig());
+    }
+
     async join(kamerId) {
         const res = await window.dbApi.reserveerPlek(kamerId, this.user.id);
         if (res.success) {
-            if (res.server_ts) {
-                this._startTimer(res.server_ts);
+            // Checkt of backend direct de boeking op "Confirmed" heeft gezet (omdat groepjes uit staan)
+            if (res.direct_confirmed) {
+                this.showAlert("Je bent succesvol ingeschreven!", "success");
+                this.render(true);
+            } else {
+                if (res.server_ts) this._startTimer(res.server_ts);
+                this.render(true); 
             }
-            this.render(true); 
         } else {
             this.showAlert(res.message, "error");
         }
@@ -425,7 +517,7 @@ class App {
             if (res.message && res.message.includes('veilig')) {
                 this.showAlert(res.message, "info"); 
             } else {
-                this.showAlert("Kamer succesvol opgeslagen.", "success");
+                this.showAlert("Je inschrijving is definitief bevestigd.", "success");
             }
         } else {
             this.showAlert(res.message, "error");
@@ -441,18 +533,21 @@ class App {
         this.render(true); 
     }
 
-    // AANGEPAST: De uitlog functie bouwt nu een link om naar de juiste URL terug te keren
     logout() {
         const user = this.user;
         let redirectUrl = 'login.html';
         
-        // Kijk of we de slugs in de sessie hebben opgeslagen
         if (user && user.school_slug && user.reis_slug) {
             redirectUrl = `login.html?school=${user.school_slug}&reis=${user.reis_slug}`;
         }
         
-        window.dbApi.logout(); // Wist de localstorage
-        window.location.href = redirectUrl; // Redirect naar correcte adres
+        window.dbApi.logout();
+        
+        document.body.classList.add('page-exit');
+        
+        setTimeout(() => {
+            window.location.href = redirectUrl;
+        }, 550);
     }
 
     showAlert(msg, type) {
