@@ -203,6 +203,9 @@ class AdminApp {
     }
 
     async addReis() {
+        const submitBtn = document.querySelector('#addReisForm button[type="submit"]');
+        if (submitBtn && submitBtn.disabled) return; // Voorkom dubbele klik
+        
         const naam = document.getElementById('r_naam').value;
         const slug = document.getElementById('r_slug').value;
         const fileInput = document.getElementById('r_foto');
@@ -210,13 +213,27 @@ class AdminApp {
         
         if (!file) return this.showAlert("Selecteer een achtergrondafbeelding.", "error");
 
+        // Blokkeer de knop tijdens de upload
+        let origineleTekst = "Aanmaken";
+        if(submitBtn) {
+            submitBtn.disabled = true;
+            origineleTekst = submitBtn.innerText;
+            submitBtn.innerText = "Bezig...";
+        }
+
         this.showAlert("Afbeelding wordt geüpload...", "info");
 
         const uploadRes = await window.dbApi.uploadAfbeelding(file);
-        if (!uploadRes.success) return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
+        if (!uploadRes.success) {
+            if(submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
+            return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
+        }
 
         const res = await window.dbApi.addReis(naam, slug, uploadRes.url);
         
+        // Geef knop weer vrij
+        if(submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
+
         if (res.success) {
             this.showAlert("Reis succesvol aangemaakt.", "success");
             document.getElementById('addReisForm').reset();
@@ -299,6 +316,9 @@ class AdminApp {
     }
 
     async addBestemming() {
+        const submitBtn = document.querySelector('#addBestemmingForm button[type="submit"]');
+        if (submitBtn && submitBtn.disabled) return; // Voorkom dubbele klik
+        
         const reis_id = document.getElementById('b_reis').value; 
         const naam = document.getElementById('b_naam').value;
         const fileInput = document.getElementById('b_foto');
@@ -306,12 +326,26 @@ class AdminApp {
 
         if (!file) return this.showAlert("Selecteer een dashboardafbeelding.", "error");
 
+        // Blokkeer de knop tijdens de upload
+        let origineleTekst = "Toevoegen";
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            origineleTekst = submitBtn.innerText;
+            submitBtn.innerText = "Bezig...";
+        }
+
         this.showAlert("Afbeelding wordt geüpload...", "info");
 
         const uploadRes = await window.dbApi.uploadAfbeelding(file);
-        if (!uploadRes.success) return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
+        if (!uploadRes.success) {
+            if(submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
+            return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
+        }
 
         const res = await window.dbApi.addHotel(reis_id, naam, uploadRes.url); 
+        
+        // Geef knop weer vrij
+        if(submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
         
         if (res.success) {
             this.showAlert("Bestemming succesvol toegevoegd.", "success");
@@ -377,15 +411,30 @@ class AdminApp {
     async saveModal() {
         if(!this.editContext) return;
         
+        const submitBtn = document.querySelector('#editModal button.bg-primary-600');
+        if (submitBtn && submitBtn.disabled) return; // Voorkom dubbele klik
+        
         const naam = document.getElementById('edit_modal_naam').value;
         const fileInput = document.getElementById('edit_modal_foto');
         let newPhotoUrl = null;
 
+        // Blokkeer knop
+        let origineleTekst = "Bevestigen";
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            origineleTekst = submitBtn.innerText;
+            submitBtn.innerText = "Bezig...";
+        }
+
         if (fileInput && fileInput.files[0]) {
             this.showAlert("Nieuwe foto wordt geüpload...", "info");
             const uploadRes = await window.dbApi.uploadAfbeelding(fileInput.files[0]);
-            if (uploadRes.success) newPhotoUrl = uploadRes.url;
-            else return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
+            if (uploadRes.success) {
+                newPhotoUrl = uploadRes.url;
+            } else {
+                if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
+                return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
+            }
         }
         
         if (this.editContext.type === 'reis') {
@@ -403,6 +452,8 @@ class AdminApp {
             else this.showAlert(res.message, "error");
         }
 
+        // Geef knop weer vrij en sluit
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
         this.closeModal();
         await this.init();
     }
