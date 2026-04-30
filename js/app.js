@@ -27,14 +27,19 @@ class App {
         await window.dbApi.initializeDB();
         await window.dbApi.syncServerTime();
 
-        const settings = await window.dbApi.getAppSettings();
-        if (settings.app_title) {
-            if (document.getElementById('navTitle')) document.getElementById('navTitle').innerText = settings.app_title;
-            if (document.getElementById('pageTitle')) document.title = settings.app_title;
+        // AANGEPAST: Titels vullen op basis van de ingelogde sessie-informatie
+        if (document.getElementById('navTitle')) {
+            document.getElementById('navTitle').innerText = this.user.reis_naam || 'Kamerverdeling';
+        }
+        if (document.getElementById('schoolSubTitle')) {
+            document.getElementById('schoolSubTitle').innerText = this.user.school_naam || '';
+        }
+        if (document.getElementById('pageTitle')) {
+            document.title = (this.user.reis_naam || 'Kamerverdeling') + " - Overzicht";
         }
 
-        // Haalt enkel de bestemmingen op voor de huidige school en reis (afgehandeld in data.js)
-        this.hotels = await window.dbApi.getHotels(true);
+        // AANGEPAST: Haalt enkel de bestemmingen op voor de huidige actieve REIS (filter op reis_id)
+        this.hotels = await window.dbApi.getHotels(true, this.user.reis_id);
         if (this.hotels.length > 0) {
             this.currentHotelId = this.hotels[0].id;
         }
@@ -436,9 +441,18 @@ class App {
         this.render(true); 
     }
 
+    // AANGEPAST: De uitlog functie bouwt nu een link om naar de juiste URL terug te keren
     logout() {
-        window.dbApi.logout();
-        window.location.href = 'login.html';
+        const user = this.user;
+        let redirectUrl = 'login.html';
+        
+        // Kijk of we de slugs in de sessie hebben opgeslagen
+        if (user && user.school_slug && user.reis_slug) {
+            redirectUrl = `login.html?school=${user.school_slug}&reis=${user.reis_slug}`;
+        }
+        
+        window.dbApi.logout(); // Wist de localstorage
+        window.location.href = redirectUrl; // Redirect naar correcte adres
     }
 
     showAlert(msg, type) {
