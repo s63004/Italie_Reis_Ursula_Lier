@@ -1,16 +1,14 @@
-// admin.js - Logica voor het Admin Paneel (Multi-Tenant & Geprofessionaliseerd)
+// admin.js - Logica voor het Admin Paneel (Multi-Tenant, Klassen & Geprofessionaliseerd)
 
 class AdminApp {
     constructor() {
         this.user = window.dbApi.getCurrentUser();
-        // Als de gebruiker er niet is of geen leerkracht is EN we zijn niet net ingelogd via de overlay, stop
         if ((!this.user || !this.user.isLeerkracht) && !document.getElementById('adminLoginScreen')) {
             alert("Toegang geweigerd. Alleen voor leerkrachten.");
             window.location.href = 'login.html';
             return;
         }
 
-        // Voorkom initialisatie fouten als de dummy user actief is vanuit de login overlay
         if (this.user && this.user.dummy) return;
 
         this.currentTab = 'reizen'; 
@@ -21,7 +19,7 @@ class AdminApp {
     }
 
     async init() {
-        if(!this.user) return; // Dubbele check
+        if(!this.user) return; 
 
         document.getElementById('userInfo').innerText = `Admin: ${this.user.vnaam} ${this.user.naam}`;
         
@@ -31,16 +29,15 @@ class AdminApp {
             if (document.getElementById('pageTitle')) document.title = settings.app_title + " Beheer";
         }
 
-        // Haalt enkel de reizen en hotels van de EIGEN school op
         this.reizen = await window.dbApi.getReizen(false);
         this.hotels = await window.dbApi.getHotels(false);
         
         this.populateReisDropdown(); 
         this.populateHotelDropdowns();
+        this.populateExportDropdown(); 
 
         this.setTab(this.currentTab);
 
-        // NIEUW: Voorkom dubbele event listeners en realtime subscriptions (Lost de crash op)
         if (!this._eventsAttached) {
             const addReisForm = document.getElementById('addReisForm');
             if (addReisForm) {
@@ -85,9 +82,64 @@ class AdminApp {
                 if(this.user && !this.user.dummy) this.refreshCurrentTab();
             }, 5000);
 
-            // Markeer als ingesteld
+            const filterKlasBtn = document.getElementById('filter_l_klas');
+            if (filterKlasBtn) {
+                filterKlasBtn.addEventListener('change', () => this.renderLeerlingen());
+            }
+
             this._eventsAttached = true;
         }
+
+        // NIEUW: Genereer de vinkjes voor de klassen
+        this.populateKlassenCheckboxes();
+    }
+
+    // --- NIEUW: Automatisch lijst van alle klassen in school ophalen ---
+    async getUniekeKlassen() {
+        const leerlingen = await window.dbApi.getAllLeerlingen();
+        return [...new Set(leerlingen.map(l => l.klas))].filter(k => k && k !== 'null' && k !== '-').sort();
+    }
+
+    async populateKlassenCheckboxes() {
+        const klassen = await this.getUniekeKlassen();
+        const container = document.getElementById('r_klassen_container');
+        if (!container) return;
+        
+        if (klassen.length === 0) {
+            container.innerHTML = '<span class="text-slate-400 italic text-xs">Geen klassen in database gevonden</span>';
+            return;
+        }
+
+        let html = `
+            <label class="flex items-center gap-2 cursor-pointer p-1 hover:bg-slate-50 rounded">
+                <input type="checkbox" id="r_klassen_all" value="*" checked class="w-3.5 h-3.5 text-primary-600 rounded border-slate-300">
+                <span class="font-bold text-slate-700 text-xs">Alle klassen (*)</span>
+            </label>
+            <div class="border-t border-slate-100 my-1"></div>
+        `;
+
+        klassen.forEach(k => {
+            html += `
+            <label class="flex items-center gap-2 cursor-pointer ml-1 p-1 hover:bg-slate-50 rounded">
+                <input type="checkbox" name="r_klas_optie" value="${k}" checked class="w-3.5 h-3.5 text-primary-600 rounded border-slate-300">
+                <span class="text-slate-700 text-xs">${k}</span>
+            </label>`;
+        });
+
+        container.innerHTML = html;
+
+        // Logica zodat "Alle klassen" aan- of uitvinkt
+        const allCb = document.getElementById('r_klassen_all');
+        const klasCbs = document.getElementsByName('r_klas_optie');
+        allCb.addEventListener('change', (e) => {
+            klasCbs.forEach(cb => cb.checked = e.target.checked);
+        });
+        klasCbs.forEach(cb => {
+            cb.addEventListener('change', () => {
+                if (!cb.checked) allCb.checked = false;
+                if (Array.from(klasCbs).every(c => c.checked)) allCb.checked = true;
+            });
+        });
     }
 
     populateReisDropdown() {
@@ -111,12 +163,12 @@ class AdminApp {
             selectFilter.innerHTML = '';
             const allOpt = document.createElement('option');
             allOpt.value = "";
-            allOpt.innerText = "--- Toon alle hotels ---";
+            allOpt.innerText = "--- Toon alle opties/locaties ---";
             selectFilter.appendChild(allOpt);
         }
 
         this.hotels.forEach(h => {
-            const reisNaam = h.reis ? h.reis.naam : 'Geen Reis'; 
+            const reisNaam = h.reis ? h.reis.naam : 'Geen Activiteit'; 
             
             if(selectAdd) {
                 const optAdd = document.createElement('option');
@@ -131,6 +183,19 @@ class AdminApp {
                 optFilter.innerText = `${h.naam} (${reisNaam})`; 
                 selectFilter.appendChild(optFilter);
             }
+        });
+    }
+
+    populateExportDropdown() {
+        const selectExport = document.getElementById('export_reis_filter');
+        if (!selectExport) return;
+        
+        selectExport.innerHTML = '<option value="">--- Alle Activiteiten / Reizen exporteren ---</option>';
+        this.reizen.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.innerText = r.naam;
+            selectExport.appendChild(opt);
         });
     }
 
@@ -172,7 +237,7 @@ class AdminApp {
         this.refreshCurrentTab();
     }
 
-    // --- REIZEN LOGICA ---
+    // --- REIZEN / ACTIVITEITEN LOGICA ---
     async renderReizen() {
         const tbody = document.getElementById('reizenTableBody');
         if (!tbody) return;
@@ -188,11 +253,20 @@ class AdminApp {
             tr.className = 'border-b hover:bg-gray-50 transition';
             
             const fullLink = `${baseUrl}login.html?school=${schoolSlug}&reis=${r.slug}`;
+            
+            const groepjesText = r.sta_groepjes_toe !== false ? 'Groepjes (Ja)' : 'Individueel (Nee)';
+            const klassenText = r.toegestane_klassen && r.toegestane_klassen !== '*' ? r.toegestane_klassen : 'Alle klassen';
 
             tr.innerHTML = `
                 <td class="p-3 font-medium">${r.naam}</td>
-                <td class="p-3 text-sm text-gray-500">${r.slug}</td>
-                <td class="p-3"><button onclick="window.adminApp.copyLink('${fullLink}')" class="text-xs bg-gray-100 hover:bg-gray-200 p-1.5 rounded border border-gray-300 transition">Kopieer Link</button></td>
+                <td class="p-3 text-sm text-gray-500">
+                    ${r.slug}<br>
+                    <button onclick="window.adminApp.copyLink('${fullLink}')" class="text-xs mt-1 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded border border-gray-300 transition shadow-sm font-medium">Kopieer Link</button>
+                </td>
+                <td class="p-3 text-xs text-gray-600">
+                    <span class="block"><b>Klassen:</b> ${klassenText}</span>
+                    <span class="block"><b>Type:</b> ${groepjesText}</span>
+                </td>
                 <td class="p-3 text-right">
                     <button onclick="window.adminApp.editReis(${r.id})" class="text-blue-600 hover:underline mr-3 font-medium">Bewerk</button>
                     <button onclick="window.adminApp.deleteReis(${r.id})" class="text-red-600 hover:underline font-medium">Verwijder</button>
@@ -204,16 +278,24 @@ class AdminApp {
 
     async addReis() {
         const submitBtn = document.querySelector('#addReisForm button[type="submit"]');
-        if (submitBtn && submitBtn.disabled) return; // Voorkom dubbele klik
+        if (submitBtn && submitBtn.disabled) return; 
         
         const naam = document.getElementById('r_naam').value;
         const slug = document.getElementById('r_slug').value;
         const fileInput = document.getElementById('r_foto');
+        const groepjes = document.getElementById('r_groepjes').checked;
         const file = fileInput.files[0];
+        
+        // NIEUW: Bepaal de String van de geselecteerde klassen
+        let klassen = '*';
+        const allCb = document.getElementById('r_klassen_all');
+        if (allCb && !allCb.checked) {
+            const checkedOptions = Array.from(document.getElementsByName('r_klas_optie')).filter(cb => cb.checked).map(cb => cb.value);
+            klassen = checkedOptions.length > 0 ? checkedOptions.join(', ') : 'NIEMAND';
+        }
         
         if (!file) return this.showAlert("Selecteer een achtergrondafbeelding.", "error");
 
-        // Blokkeer de knop tijdens de upload
         let origineleTekst = "Aanmaken";
         if(submitBtn) {
             submitBtn.disabled = true;
@@ -229,25 +311,24 @@ class AdminApp {
             return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
         }
 
-        const res = await window.dbApi.addReis(naam, slug, uploadRes.url);
+        const res = await window.dbApi.addReis(naam, slug, uploadRes.url, klassen, groepjes);
         
-        // Geef knop weer vrij
         if(submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
 
         if (res.success) {
-            this.showAlert("Reis succesvol aangemaakt.", "success");
+            this.showAlert("Activiteit succesvol aangemaakt.", "success");
             document.getElementById('addReisForm').reset();
             await this.init(); 
         } else {
-            this.showAlert(res.message || "Fout bij aanmaken reis.", "error");
+            this.showAlert(res.message || "Fout bij aanmaken.", "error");
         }
     }
 
     async deleteReis(id) {
-        if(confirm("Waarschuwing: Dit verwijdert de reis inclusief alle gekoppelde hotels, kamers en reservaties. Doorgaan?")) {
+        if(confirm("Waarschuwing: Dit verwijdert de activiteit inclusief alle gekoppelde locaties, opties en reservaties. Doorgaan?")) {
             const res = await window.dbApi.deleteReis(id);
             if(res.success) {
-                this.showAlert("Reis verwijderd.", "info");
+                this.showAlert("Activiteit verwijderd.", "info");
                 await this.init();
             } else {
                 this.showAlert(res.message, "error");
@@ -255,12 +336,42 @@ class AdminApp {
         }
     }
 
-    editReis(id) {
+    async editReis(id) {
         const r = this.reizen.find(x => x.id === id);
         if(!r) return;
         this.editContext = { type: 'reis', id: id };
         
-        document.getElementById('modalTitle').innerText = 'Reis Aanpassen';
+        // NIEUW: Genereren van de checklist voor in het bewerk venster
+        const klassenLijst = await this.getUniekeKlassen();
+        const geselecteerd = r.toegestane_klassen ? r.toegestane_klassen.split(',').map(s => s.trim()) : [];
+        const isAll = r.toegestane_klassen === '*' || r.toegestane_klassen === '' || !r.toegestane_klassen;
+
+        let klassenHtml = `
+            <div class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm bg-white max-h-32 overflow-y-auto flex flex-col gap-1 custom-scrollbar">
+                <label class="flex items-center gap-2 cursor-pointer p-1 hover:bg-slate-50 rounded">
+                    <input type="checkbox" id="edit_modal_klassen_all" value="*" ${isAll ? 'checked' : ''} onchange="
+                        document.getElementsByName('edit_klas_optie').forEach(cb => cb.checked = this.checked);
+                    " class="w-3.5 h-3.5 text-primary-600 rounded border-slate-300">
+                    <span class="font-bold text-slate-700 text-xs">Alle klassen (*)</span>
+                </label>
+                <div class="border-t border-slate-100 my-1"></div>
+        `;
+
+        klassenLijst.forEach(k => {
+            const isChecked = isAll || geselecteerd.includes(k);
+            klassenHtml += `
+                <label class="flex items-center gap-2 cursor-pointer ml-1 p-1 hover:bg-slate-50 rounded">
+                    <input type="checkbox" name="edit_klas_optie" value="${k}" ${isChecked ? 'checked' : ''} onchange="
+                        if(!this.checked) document.getElementById('edit_modal_klassen_all').checked = false;
+                        if(Array.from(document.getElementsByName('edit_klas_optie')).every(c => c.checked)) document.getElementById('edit_modal_klassen_all').checked = true;
+                    " class="w-3.5 h-3.5 text-primary-600 rounded border-slate-300">
+                    <span class="text-slate-700 text-xs">${k}</span>
+                </label>
+            `;
+        });
+        klassenHtml += `</div>`;
+
+        document.getElementById('modalTitle').innerText = 'Activiteit Aanpassen';
         document.getElementById('modalFields').innerHTML = `
             <div>
                 <label class="block text-sm font-medium mb-1">Naam</label>
@@ -271,18 +382,28 @@ class AdminApp {
                 <input type="text" id="edit_modal_slug" value="${r.slug}" class="w-full p-2 border rounded">
             </div>
             <div>
+                <label class="block text-sm font-medium mb-1">Toegestane Klassen</label>
+                ${klassenHtml}
+            </div>
+            <div>
                 <label class="block text-sm font-medium mb-1">Nieuwe Achtergrondfoto (Optioneel)</label>
                 <input type="file" id="edit_modal_foto" accept="image/*" class="w-full p-1.5 border rounded">
             </div>
-            <div class="flex items-center mt-2">
-                <input type="checkbox" id="edit_modal_actief" ${r.is_actief ? 'checked' : ''} class="w-4 h-4 text-blue-600 rounded">
-                <label class="ml-2 text-sm font-medium">Reis is actief (Zichtbaar voor leerlingen)</label>
+            <div class="flex flex-col gap-2 mt-3 border-t border-slate-100 pt-3">
+                <div class="flex items-center">
+                    <input type="checkbox" id="edit_modal_groepjes" ${r.sta_groepjes_toe !== false ? 'checked' : ''} class="w-4 h-4 text-blue-600 rounded">
+                    <label class="ml-2 text-sm font-medium">Groepsinschrijvingen toestaan</label>
+                </div>
+                <div class="flex items-center">
+                    <input type="checkbox" id="edit_modal_actief" ${r.is_actief ? 'checked' : ''} class="w-4 h-4 text-blue-600 rounded">
+                    <label class="ml-2 text-sm font-medium">Activiteit is actief (Zichtbaar voor leerlingen)</label>
+                </div>
             </div>
         `;
         document.getElementById('editModal').classList.remove('hidden');
     }
 
-    // --- BESTEMMINGEN LOGICA ---
+    // --- BESTEMMINGEN / OPTIES LOGICA ---
     async renderBestemmingen() {
         const tbody = document.getElementById('bestemmingenTableBody');
         if (!tbody) return;
@@ -317,16 +438,15 @@ class AdminApp {
 
     async addBestemming() {
         const submitBtn = document.querySelector('#addBestemmingForm button[type="submit"]');
-        if (submitBtn && submitBtn.disabled) return; // Voorkom dubbele klik
+        if (submitBtn && submitBtn.disabled) return; 
         
         const reis_id = document.getElementById('b_reis').value; 
         const naam = document.getElementById('b_naam').value;
         const fileInput = document.getElementById('b_foto');
         const file = fileInput.files[0];
 
-        if (!file) return this.showAlert("Selecteer een dashboardafbeelding.", "error");
+        if (!file) return this.showAlert("Selecteer een overzichtsafbeelding.", "error");
 
-        // Blokkeer de knop tijdens de upload
         let origineleTekst = "Toevoegen";
         if (submitBtn) {
             submitBtn.disabled = true;
@@ -344,11 +464,10 @@ class AdminApp {
 
         const res = await window.dbApi.addHotel(reis_id, naam, uploadRes.url); 
         
-        // Geef knop weer vrij
         if(submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
         
         if (res.success) {
-            this.showAlert("Bestemming succesvol toegevoegd.", "success");
+            this.showAlert("Optie succesvol toegevoegd.", "success");
             document.getElementById('addBestemmingForm').reset();
             await this.init();
         } else {
@@ -357,10 +476,10 @@ class AdminApp {
     }
 
     async deleteHotel(id) {
-        if(confirm("Waarschuwing: Dit verwijdert het hotel en alle bijbehorende kamers. Doorgaan?")) {
+        if(confirm("Waarschuwing: Dit verwijdert deze optie en alle gekoppelde plaatsen/kamers. Doorgaan?")) {
             const res = await window.dbApi.deleteHotel(id);
             if(res.success) {
-                this.showAlert("Hotel verwijderd.", "info");
+                this.showAlert("Optie verwijderd.", "info");
                 await this.init();
             } else {
                 this.showAlert(res.message, "error");
@@ -375,20 +494,20 @@ class AdminApp {
         
         let reisOptions = this.reizen.map(r => `<option value="${r.id}" ${h.reis_id === r.id ? 'selected' : ''}>${r.naam}</option>`).join('');
 
-        document.getElementById('modalTitle').innerText = 'Hotel Aanpassen';
+        document.getElementById('modalTitle').innerText = 'Optie Aanpassen';
         document.getElementById('modalFields').innerHTML = `
             <div>
-                <label class="block text-sm font-medium mb-1">Gekoppelde Reis</label>
+                <label class="block text-sm font-medium mb-1">Gekoppelde Activiteit</label>
                 <select id="edit_modal_reis" class="w-full p-2 border rounded bg-white">
                     ${reisOptions}
                 </select>
             </div>
             <div>
-                <label class="block text-sm font-medium mb-1">Hotel Naam</label>
+                <label class="block text-sm font-medium mb-1">Naam / Titel</label>
                 <input type="text" id="edit_modal_naam" value="${h.naam}" class="w-full p-2 border rounded">
             </div>
             <div>
-                <label class="block text-sm font-medium mb-1">Nieuwe Dashboardfoto (Optioneel)</label>
+                <label class="block text-sm font-medium mb-1">Nieuwe Overzichtsfoto (Optioneel)</label>
                 <input type="file" id="edit_modal_foto" accept="image/*" class="w-full p-1.5 border rounded">
             </div>
         `;
@@ -397,7 +516,7 @@ class AdminApp {
 
     async toggleBestemming(id, isActief) {
         await window.dbApi.toggleHotelActief(id, isActief);
-        this.showAlert(isActief ? "Bestemming is nu zichtbaar." : "Bestemming verborgen.", "info");
+        this.showAlert(isActief ? "Optie is nu zichtbaar." : "Optie is verborgen.", "info");
         this.hotels = await window.dbApi.getHotels(false);
         this.populateHotelDropdowns();
     }
@@ -412,13 +531,12 @@ class AdminApp {
         if(!this.editContext) return;
         
         const submitBtn = document.querySelector('#editModal button.bg-primary-600');
-        if (submitBtn && submitBtn.disabled) return; // Voorkom dubbele klik
+        if (submitBtn && submitBtn.disabled) return;
         
         const naam = document.getElementById('edit_modal_naam').value;
         const fileInput = document.getElementById('edit_modal_foto');
         let newPhotoUrl = null;
 
-        // Blokkeer knop
         let origineleTekst = "Bevestigen";
         if (submitBtn) {
             submitBtn.disabled = true;
@@ -440,25 +558,33 @@ class AdminApp {
         if (this.editContext.type === 'reis') {
             const slug = document.getElementById('edit_modal_slug').value;
             const isActief = document.getElementById('edit_modal_actief').checked;
+            const groepjes = document.getElementById('edit_modal_groepjes').checked;
+
+            // Uitlezen van geselecteerde klassen
+            let klassen = '*';
+            const allCbModal = document.getElementById('edit_modal_klassen_all');
+            if (allCbModal && !allCbModal.checked) {
+                const checkedOptions = Array.from(document.getElementsByName('edit_klas_optie')).filter(cb => cb.checked).map(cb => cb.value);
+                klassen = checkedOptions.length > 0 ? checkedOptions.join(', ') : 'NIEMAND';
+            }
             
-            const res = await window.dbApi.updateReis(this.editContext.id, naam, slug, newPhotoUrl, isActief);
-            if(res.success) this.showAlert("Reis succesvol bijgewerkt.", "success");
+            const res = await window.dbApi.updateReis(this.editContext.id, naam, slug, newPhotoUrl, isActief, klassen, groepjes);
+            if(res.success) this.showAlert("Succesvol bijgewerkt.", "success");
             else this.showAlert(res.message, "error");
         } 
         else if (this.editContext.type === 'hotel') {
             const reisId = document.getElementById('edit_modal_reis').value;
             const res = await window.dbApi.updateHotel(this.editContext.id, naam, newPhotoUrl, reisId);
-            if(res.success) this.showAlert("Hotel succesvol bijgewerkt.", "success");
+            if(res.success) this.showAlert("Succesvol bijgewerkt.", "success");
             else this.showAlert(res.message, "error");
         }
 
-        // Geef knop weer vrij en sluit
         if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
         this.closeModal();
         await this.init();
     }
 
-    // --- KAMERS LOGICA ---
+    // --- KAMERS / PLAATSEN LOGICA ---
     async renderKamers() {
         const tbody = document.getElementById('kamersTableBody');
         if (!tbody) return;
@@ -478,7 +604,7 @@ class AdminApp {
             tr.innerHTML = `
                 <td class="p-3 font-medium">${k.kamer_nr}</td>
                 <td class="p-3 text-gray-600">${hotelNaam}</td>
-                <td class="p-3">${k.geslacht === 'M' ? 'Jongens' : 'Meisjes'}</td>
+                <td class="p-3">${k.geslacht === 'M' ? 'Jongens' : (k.geslacht === 'V' ? 'Meisjes' : 'Gemengd')}</td>
                 <td class="p-3">${k.capaciteit} (Bezet: ${k.bezet})</td>
                 <td class="p-3 text-right">
                     <button onclick="window.adminApp.openEditKamer(${k.id}, '${k.kamer_nr}', ${k.capaciteit}, '${k.geslacht}')" class="text-blue-500 hover:underline mr-3 font-medium">Bewerk</button>
@@ -514,16 +640,16 @@ class AdminApp {
         }
 
         await window.dbApi.addMeerdereKamers(kamersArray);
-        this.showAlert(`${aantal} kamer(s) succesvol toegevoegd.`, "success");
+        this.showAlert(`${aantal} plaats(en) succesvol toegevoegd.`, "success");
         document.getElementById('addKamerForm').reset();
         this.renderKamers();
     }
 
     async deleteKamer(id) {
-        if(confirm("Weet je zeker dat je deze lege kamer wilt verwijderen?")) {
+        if(confirm("Weet je zeker dat je deze lege plaats wilt verwijderen?")) {
             const res = await window.dbApi.deleteKamer(id);
             if(res.success) {
-                this.showAlert("Kamer verwijderd.", "info");
+                this.showAlert("Plaats verwijderd.", "info");
                 this.renderKamers();
             } else {
                 this.showAlert(res.message, "error");
@@ -548,7 +674,7 @@ class AdminApp {
         const res = await window.dbApi.updateKamer(id, nr, cap, geslacht);
         if(res.success) {
             document.getElementById('editKamerModal').classList.add('hidden');
-            this.showAlert("Kamer bijgewerkt.", "success");
+            this.showAlert("Gegevens bijgewerkt.", "success");
             this.renderKamers();
         } else {
             this.showAlert(res.message, "error");
@@ -565,7 +691,7 @@ class AdminApp {
         const bezetteKamers = kamers.filter(k => k.bezet > 0);
 
         if (bezetteKamers.length === 0) {
-            grid.innerHTML = `<div class="col-span-2 p-8 text-center text-gray-500 bg-gray-50 rounded border border-gray-200">Er zijn nog geen reservaties gemaakt.</div>`;
+            grid.innerHTML = `<div class="col-span-2 p-8 text-center text-gray-500 bg-gray-50 rounded border border-gray-200">Er zijn nog geen inschrijvingen gemaakt.</div>`;
             return;
         }
 
@@ -578,10 +704,10 @@ class AdminApp {
             
             let html = `
                 <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h4 class="font-bold text-gray-800">Kamer ${k.kamer_nr} <span class="text-xs font-normal text-gray-500 ml-2">(${hotelNaam} - ${k.geslacht})</span></h4>
+                    <h4 class="font-bold text-gray-800">${k.kamer_nr} <span class="text-xs font-normal text-gray-500 ml-2">(${hotelNaam} - ${k.geslacht})</span></h4>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-bold px-2 py-1 bg-gray-100 text-gray-600 rounded">${k.bezet}/${k.capaciteit}</span>
-                        <button onclick="window.adminApp.kickKamer(${k.id})" class="text-xs text-red-500 hover:text-red-700 font-medium" title="Maak volledige kamer leeg">Leegmaken</button>
+                        <button onclick="window.adminApp.kickKamer(${k.id})" class="text-xs text-red-500 hover:text-red-700 font-medium" title="Maak volledige groep leeg">Leegmaken</button>
                     </div>
                 </div>
                 <ul class="space-y-2">
@@ -590,11 +716,13 @@ class AdminApp {
             k.reservaties.forEach(r => {
                 const user = r.gebruiker;
                 const statusColor = r.status === 'confirmed' ? 'text-green-600' : 'text-orange-500';
+                const klasTxt = user && user.klas && user.klas !== 'null' ? user.klas : '-';
+                const naamWeergave = user ? `${user.vnaam} ${user.naam} (${klasTxt})` : 'Onbekend';
                 
                 html += `
                     <li class="flex justify-between items-center text-sm p-2 bg-gray-50 rounded border border-gray-100">
                         <div>
-                            <span class="font-medium text-gray-800">${user ? user.vnaam + ' ' + user.naam : 'Onbekend'}</span>
+                            <span class="font-medium text-gray-800">${naamWeergave}</span>
                             <span class="text-xs ${statusColor} font-semibold ml-2">(${r.status})</span>
                         </div>
                         <button onclick="window.adminApp.kickUser('${r.id}')" class="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1 rounded font-medium transition border border-red-100">Verwijder</button>
@@ -609,17 +737,17 @@ class AdminApp {
     }
 
     async kickUser(resId) {
-        if(confirm("Reservatie annuleren? De leerling verliest zijn plaats in deze kamer.")) {
+        if(confirm("Inschrijving annuleren? Deze persoon verliest de plaats.")) {
             await window.dbApi.removeReservatieAdmin(resId);
-            this.showAlert("Reservatie verwijderd.", "info");
+            this.showAlert("Inschrijving verwijderd.", "info");
             this.renderReservaties();
         }
     }
 
     async kickKamer(kamerId) {
-        if(confirm("Waarschuwing: Wil je IEDEREEN uit deze kamer verwijderen?")) {
+        if(confirm("Waarschuwing: Wil je IEDEREEN uit deze plaats verwijderen?")) {
             await window.dbApi.kickAllInKamer(kamerId);
-            this.showAlert("Kamer is leeggemaakt.", "info");
+            this.showAlert("Groep is leeggemaakt.", "info");
             this.renderReservaties();
         }
     }
@@ -631,36 +759,55 @@ class AdminApp {
         const leerlingen = await window.dbApi.getAllLeerlingen();
         const { data: alleReservaties } = await window.dbApi.supabaseClient.from('reservering').select('*');
         
-        tbody.innerHTML = '';
-        leerlingen.sort((a, b) => a.naam.localeCompare(b.naam));
+        const filterEl = document.getElementById('filter_l_klas');
+        let selectedKlas = filterEl ? filterEl.value : '';
 
-        leerlingen.forEach(l => {
+        if (filterEl && filterEl.options.length <= 1) {
+            const uniekeKlassen = [...new Set(leerlingen.map(l => l.klas))].filter(k => k && k !== 'null' && k !== '-').sort();
+            filterEl.innerHTML = '<option value="">--- Alle klassen ---</option>';
+            uniekeKlassen.forEach(k => {
+                filterEl.innerHTML += `<option value="${k}">${k}</option>`;
+            });
+            filterEl.value = selectedKlas;
+        }
+
+        let gefilterdeLeerlingen = leerlingen;
+        if (selectedKlas && selectedKlas !== '') {
+            gefilterdeLeerlingen = leerlingen.filter(l => l.klas === selectedKlas);
+        }
+
+        tbody.innerHTML = '';
+        gefilterdeLeerlingen.sort((a, b) => a.naam.localeCompare(b.naam));
+
+        gefilterdeLeerlingen.forEach(l => {
             const userRes = (alleReservaties || []).filter(r => r.persoon_id === l.id && r.status === 'confirmed');
             let statusHtml;
             if (userRes.length >= 2) {
-                statusHtml = `<span class="px-2 py-1 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium">In orde</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium">Meerdere Inschrijvingen</span>`;
             } else if (userRes.length === 1) {
-                statusHtml = `<span class="px-2 py-1 bg-yellow-50 text-yellow-700 text-xs rounded border border-yellow-200 font-medium">Deels in orde</span>`;
+                statusHtml = `<span class="px-2 py-1 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium">Ingeschreven</span>`;
             } else {
                 statusHtml = `<span class="px-2 py-1 bg-gray-50 text-gray-500 text-xs rounded border border-gray-200 font-medium">Nog niet</span>`;
             }
             const hasRes = userRes.length > 0;
 
             const geslachtTxt = l.geslacht ? (l.geslacht === 'M' ? 'Jongen' : 'Meisje') : '<span class="text-gray-400 italic text-xs">Onbekend</span>';
-            const klasTxt = l.klas || '-';
-            const rolTxt = l.rol === 'LEERKRACHT' || l.rol === 'LK' ? '<span class="text-purple-600 font-medium text-xs bg-purple-50 px-2 py-1 rounded border border-purple-100">Leerkracht</span>' : '<span class="text-blue-600 font-medium text-xs">Leerling</span>';
+            const klasTxt = l.klas && l.klas !== 'null' ? l.klas : '-';
+            const rolTxt = l.rol === 'LEERKRACHT' || l.rol === 'LK' ? '<span class="text-purple-600 font-medium text-xs bg-purple-50 px-2 py-1 rounded border border-purple-100">Leerkracht</span>' : '<span class="text-blue-600 font-medium text-xs">Student</span>';
+
+            const naamWeergave = `${l.naam} ${l.vnaam} (${klasTxt})`;
 
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50';
             tr.innerHTML = `
-                <td class="p-3 font-medium text-gray-800">${l.naam} ${l.vnaam}</td>
+                <td class="p-3 font-medium text-gray-800">${naamWeergave}</td>
                 <td class="p-3 text-gray-600">${klasTxt}</td>
                 <td class="p-3">${rolTxt}</td>
                 <td class="p-3">${geslachtTxt}</td>
                 <td class="p-3">${statusHtml}</td>
                 <td class="p-3 text-right">
                     <button onclick="window.adminApp.openEditLeerling(${l.id}, '${l.vnaam}', '${l.naam}', '${l.geslacht}', '${l.klas}')" class="text-blue-600 hover:underline mr-3 font-medium">Bewerk</button>
-                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-600 hover:underline font-medium">Verwijder</button>` : '<span class="text-gray-400 text-xs italic" title="Deze leerling heeft actieve reservaties">Bezet</span>'}
+                    ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-600 hover:underline font-medium">Verwijder</button>` : '<span class="text-gray-400 text-xs italic" title="Deze persoon heeft actieve reservaties">Bezet</span>'}
                 </td>
             `;
             tbody.appendChild(tr);
@@ -669,7 +816,7 @@ class AdminApp {
 
     openEditLeerling(id, vnaam, naam, geslacht, klas) {
         this.editContext = { type: 'leerling', id: id };
-        document.getElementById('modalTitle').innerText = 'Leerling Aanpassen';
+        document.getElementById('modalTitle').innerText = 'Persoon Aanpassen';
         document.getElementById('modalFields').innerHTML = `
             <div class="flex gap-2">
                 <div class="flex-1">
@@ -706,11 +853,11 @@ class AdminApp {
                 
                 const res = await window.dbApi.updateLeerling(this.editContext.id, vn, n, g, k);
                 if(res.success) {
-                    this.showAlert("Leerling succesvol aangepast.", "success");
+                    this.showAlert("Persoon succesvol aangepast.", "success");
                     this.closeModal();
                     this.renderLeerlingen();
                 } else {
-                    this.showAlert("Fout bij aanpassen leerling.", "error");
+                    this.showAlert("Fout bij aanpassen persoon.", "error");
                 }
                 this.saveModal = oldSave;
             } else {
@@ -736,6 +883,8 @@ class AdminApp {
             if (res.success) {
                 this.showAlert(`Succes! ${res.count} personen geïmporteerd.`, "success");
                 fileInput.value = ''; 
+                // Vul de klassenlijst opnieuw met de nieuwe data
+                this.populateKlassenCheckboxes();
                 this.renderLeerlingen();
             } else {
                 this.showAlert(res.message, "error");
@@ -748,18 +897,26 @@ class AdminApp {
         const vnaam = document.getElementById('l_vnaam').value;
         const naam = document.getElementById('l_naam').value;
         const geslacht = document.getElementById('l_geslacht').value;
+        
+        const klasInput = document.getElementById('l_klas');
+        const rolInput = document.getElementById('l_rol');
+        
+        const klas = klasInput ? klasInput.value : '-';
+        const rol = rolInput ? rolInput.value : 'LEERLING';
 
-        await window.dbApi.addLeerling(vnaam, naam, geslacht);
-        this.showAlert("Leerling toegevoegd.", "success");
+        await window.dbApi.addLeerling(vnaam, naam, geslacht, klas, rol);
+        this.showAlert("Persoon succesvol toegevoegd.", "success");
         document.getElementById('addLeerlingForm').reset();
+        this.populateKlassenCheckboxes();
         this.renderLeerlingen();
     }
 
     async deleteLeerling(id) {
-        if(confirm("Leerling volledig verwijderen uit het systeem?")) {
+        if(confirm("Persoon volledig verwijderen uit het systeem?")) {
             const res = await window.dbApi.deleteLeerling(id);
             if(res.success) {
-                this.showAlert("Leerling verwijderd.", "info");
+                this.showAlert("Persoon verwijderd.", "info");
+                this.populateKlassenCheckboxes();
                 this.renderLeerlingen();
             } else {
                 this.showAlert(res.message, "error");
@@ -767,28 +924,41 @@ class AdminApp {
         }
     }
 
-    // --- PROFESSIONELE EXCEL EXPORT ---
+    // --- EXPORT LOGICA ---
     async exportKamersExcel() {
         if (!window.ExcelJS) {
             return this.showAlert("Systeem is nog aan het laden, probeer het zo opnieuw.", "error");
         }
 
-        const kamers = await window.dbApi.getAllKamersAdmin();
+        const exportReisSelect = document.getElementById('export_reis_filter');
+        const geselecteerdeReisId = exportReisSelect && exportReisSelect.value !== "" ? parseInt(exportReisSelect.value) : null;
+
+        let kamers = await window.dbApi.getAllKamersAdmin();
         if (!kamers || kamers.length === 0) return this.showAlert("Er zijn geen gegevens om te exporteren.", "error");
+
+        let relevanteHotels = this.hotels;
+        if (geselecteerdeReisId) {
+            relevanteHotels = this.hotels.filter(h => h.reis_id === geselecteerdeReisId);
+            const hotelIds = relevanteHotels.map(h => h.id);
+            kamers = kamers.filter(k => hotelIds.includes(k.hotelid));
+        }
+
+        if (kamers.length === 0) return this.showAlert("Geen inschrijvingen gevonden voor deze selectie.", "error");
 
         this.showAlert("Excel-export wordt voorbereid...", "info");
 
-        const actieveReisNaam = this.reizen.length > 0 ? this.reizen[0].naam : "Export Kamerverdeling";
+        const actieveReis = geselecteerdeReisId ? this.reizen.find(r => r.id === geselecteerdeReisId) : (this.reizen.length > 0 ? this.reizen[0] : null);
+        const actieveReisNaam = actieveReis ? actieveReis.naam : "Export Alle Activiteiten";
 
         const kamersPerHotel = {};
-        this.hotels.forEach(h => kamersPerHotel[h.id] = { naam: h.naam, kamers: [] });
+        relevanteHotels.forEach(h => kamersPerHotel[h.id] = { naam: h.naam, kamers: [] });
         kamers.forEach(k => {
             if (kamersPerHotel[k.hotelid]) kamersPerHotel[k.hotelid].kamers.push(k);
         });
         const hotelIds = Object.keys(kamersPerHotel).filter(id => kamersPerHotel[id].kamers.length > 0);
 
         const workbook = new ExcelJS.Workbook();
-        const sheet = workbook.addWorksheet('Kamerverdeling');
+        const sheet = workbook.addWorksheet('Verdeling');
 
         sheet.mergeCells('A1:I2');
         const titleCell = sheet.getCell('A1');
@@ -812,7 +982,7 @@ class AdminApp {
             hTitle.alignment = { horizontal: 'center' };
             currentRow++;
 
-            const headers = ['Kamer', 'Cap.', 'Bezet', 'Namen Leerlingen'];
+            const headers = ['Optie/Plaats', 'Cap.', 'Bezet', 'Namen Deelnemers'];
             headers.forEach((h, i) => {
                 const cell = sheet.getCell(currentRow, colStart + i);
                 cell.value = h;
@@ -823,9 +993,13 @@ class AdminApp {
             currentRow++;
 
             kamersPerHotel[hotelId].kamers.forEach(k => {
-                const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : '?').join(', ');
+                const namen = k.reservaties.map(r => {
+                    if (!r.gebruiker) return '?';
+                    const klas = r.gebruiker.klas && r.gebruiker.klas !== 'null' ? r.gebruiker.klas : '-';
+                    return `${r.gebruiker.vnaam} ${r.gebruiker.naam} (${klas})`;
+                }).join(', ');
+                
                 const rowData = [ k.kamer_nr, k.capaciteit, k.bezet, namen ];
-
                 const bgColor = k.geslacht === 'M' ? 'FFE0F2FE' : 'FFFCE7F3'; 
 
                 rowData.forEach((val, i) => {
@@ -846,12 +1020,12 @@ class AdminApp {
         sheet.getColumn(1).width = 12; 
         sheet.getColumn(2).width = 8; 
         sheet.getColumn(3).width = 8; 
-        sheet.getColumn(4).width = 45; 
+        sheet.getColumn(4).width = 50;  
         sheet.getColumn(5).width = 3;  
         sheet.getColumn(6).width = 12; 
         sheet.getColumn(7).width = 8; 
         sheet.getColumn(8).width = 8; 
-        sheet.getColumn(9).width = 45; 
+        sheet.getColumn(9).width = 50; 
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -892,12 +1066,10 @@ class AdminApp {
         });
     }
 
-    // AANGEPAST: De uitlog functie bouwt nu een link om naar de juiste URL terug te keren
     logout() {
         const user = this.user;
         let redirectUrl = 'login.html';
         
-        // Kijk of we de slugs in de sessie hebben opgeslagen
         if (user && user.school_slug && user.reis_slug) {
             redirectUrl = `login.html?school=${user.school_slug}&reis=${user.reis_slug}`;
         }
