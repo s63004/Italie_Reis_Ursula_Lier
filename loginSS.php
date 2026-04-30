@@ -7,11 +7,18 @@ $client_secret = '56789def';
 // Oorspronkelijke live URL (bewaar deze voor als je website online gaat)
 // $redirect_uri = 'https://reflect.ict.campussintursula.be/loginSS.php';
 
-// Lokale test URL
-$redirect_uri = 'http://localhost/Italie%20kamerverdeling/loginSS.php';
+// Automatisch de redirect URI bepalen op basis van de huidige locatie
+$protocol = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://";
+$host = $_SERVER['HTTP_HOST'];
+$pad = $_SERVER['PHP_SELF'];
 
+$redirect_uri = $protocol . $host . $pad;
 // Stap 1: redirect naar externe login
 if (isset($_GET['aanmelden'])) {
+    // NIEUW: Sla de school en reis context op in de sessie VOORDAT we naar Smartschool gaan
+    if (isset($_GET['school'])) $_SESSION['ss_login_school'] = $_GET['school'];
+    if (isset($_GET['reis'])) $_SESSION['ss_login_reis'] = $_GET['reis'];
+
     $authorization_url = 'https://leerstof.be/campussintursula/oauth.php' . '?' .
         http_build_query(array(
             'client_id' => $client_id,
@@ -77,7 +84,6 @@ if (isset($_GET['code'])) {
 
     // -------------------------------------------------------------------------
     // Stap 5: Profiel Afronden (Geslacht & Rol vragen)
-    // In plaats van direct te redirecten, tonen we een formulier om de rest in te vullen.
     // -------------------------------------------------------------------------
     
     $voornaam = isset($userinfo['name']) ? htmlspecialchars($userinfo['name'], ENT_QUOTES) : '';
@@ -113,52 +119,47 @@ if (isset($_GET['code'])) {
             <p class="text-gray-500 mb-6" id="subtitle">Om verder te gaan, hebben we nog even je geslacht en rol nodig.</p>
             
             <form id="setupForm" class="space-y-6">
-                <!-- Geslacht Keuze -->
                 <div id="geslachtField">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Ik ben een...</label>
                     <div class="grid grid-cols-2 gap-4">
                         <label class="cursor-pointer relative">
                             <input type="radio" name="geslacht" value="M" class="peer sr-only" checked>
-                            <div class="text-center px-4 py-3 rounded-xl border-2 border-gray-200 peer-checked:bg-orange-50 peer-checked:border-orange-500 peer-checked:text-orange-700 font-medium text-gray-500 transition hover:bg-gray-50">
+                            <div class="text-center px-4 py-3 rounded-xl border-2 border-gray-200 peer-checked:bg-blue-50 peer-checked:border-blue-500 peer-checked:text-blue-700 font-medium text-gray-500 transition hover:bg-gray-50">
                                 Jongen
                             </div>
                         </label>
                         <label class="cursor-pointer relative">
                             <input type="radio" name="geslacht" value="V" class="peer sr-only">
-                            <div class="text-center px-4 py-3 rounded-xl border-2 border-gray-200 peer-checked:bg-orange-50 peer-checked:border-orange-500 peer-checked:text-orange-700 font-medium text-gray-500 transition hover:bg-gray-50">
+                            <div class="text-center px-4 py-3 rounded-xl border-2 border-gray-200 peer-checked:bg-blue-50 peer-checked:border-blue-500 peer-checked:text-blue-700 font-medium text-gray-500 transition hover:bg-gray-50">
                                 Meisje
                             </div>
                         </label>
                     </div>
                 </div>
 
-                <!-- Leerkracht Optie -->
                 <div class="flex items-center mt-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                    <input type="checkbox" id="isLeerkracht" class="w-4 h-4 text-orange-600 rounded border-gray-300 focus:ring-orange-500 cursor-pointer">
+                    <input type="checkbox" id="isLeerkracht" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
                     <label for="isLeerkracht" class="ml-2 text-sm text-gray-600 font-medium cursor-pointer">Ik ben een leerkracht</label>
                 </div>
 
-                <!-- Leerkracht Wachtwoord (verborgen tot checkbox is aangevinkt) -->
                 <div id="teacherPasswordSection" class="slide-down">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Leerkracht Wachtwoord</label>
                     <div class="relative">
-                        <input type="password" id="teacherPassword" placeholder="Voer het leerkracht-wachtwoord in..." class="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-orange-200 focus:border-orange-400 transition pr-10">
+                        <input type="password" id="teacherPassword" placeholder="Voer het leerkracht-wachtwoord in..." class="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition pr-10">
                         <svg class="w-5 h-5 text-gray-400 absolute right-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
                     </div>
                     <p class="text-xs text-gray-400 mt-1">Vraag het wachtwoord aan de beheerder.</p>
                 </div>
 
-                <!-- Error message -->
                 <div id="loginError" class="hidden bg-red-50 text-red-700 p-3 rounded-xl text-sm border border-red-200 font-medium"></div>
 
-                <button type="submit" id="submitBtn" class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                <button type="submit" id="submitBtn" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
                     <span id="submitText">Doorgaan</span>
                     <svg id="submitSpinner" class="hidden w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
                 </button>
             </form>
         </div>
 
-        <!-- Inladen van je bestaande database logica -->
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
         <script src="js/config.js"></script>
         <script src="js/data.js"></script>
@@ -166,48 +167,54 @@ if (isset($_GET['code'])) {
             const vnaam = "<?php echo addslashes($voornaam); ?>";
             const naam = "<?php echo addslashes($achternaam); ?>";
             const ssId = "<?php echo addslashes($ssUserID); ?>";
+            
+            // Haal de opgeslagen school/reis ID's op uit de sessie via PHP
+            const targetSchoolId = <?php echo isset($_SESSION['ss_login_school']) ? intval($_SESSION['ss_login_school']) : 'null'; ?>;
+            const targetReisId = <?php echo isset($_SESSION['ss_login_reis']) ? intval($_SESSION['ss_login_reis']) : 'null'; ?>;
 
-            // Toggle leerkracht wachtwoord veld
+            if (!targetSchoolId) {
+                alert("Fout: Geen school context gevonden. Gelieve de juiste link te gebruiken.");
+            }
+
             document.getElementById('isLeerkracht').addEventListener('change', function() {
                 const section = document.getElementById('teacherPasswordSection');
-                if (this.checked) {
-                    section.classList.add('open');
-                } else {
-                    section.classList.remove('open');
-                }
+                if (this.checked) section.classList.add('open');
+                else section.classList.remove('open');
             });
 
-            // Check of geslacht al bekend is in de database → skip de vraag
+            // Check of geslacht al bekend is in de database (direct via Supabase omdat user nog niet actief is)
             (async function checkExistingGender() {
+                if(!targetSchoolId) return;
                 try {
-                    const alleLeerlingen = await window.dbApi.getAllLeerlingen();
-                    const match = alleLeerlingen.find(l =>
+                    const { data: alleLeerlingen } = await window.dbApi.supabaseClient.from('persoon').select('*').eq('school_id', targetSchoolId);
+                    const match = (alleLeerlingen || []).find(l =>
                         l.vnaam.toLowerCase() === vnaam.toLowerCase() &&
                         l.naam.toLowerCase() === naam.toLowerCase()
                     );
+                    
                     if (match && match.geslacht) {
-                        // Geslacht is al bekend, verberg de keuze en stel in
                         document.getElementById('geslachtField').innerHTML = `
                             <div class="bg-green-50 text-green-700 p-3 rounded-xl border border-green-200 text-sm font-medium flex items-center gap-2">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                                Geslacht: ${match.geslacht === 'M' ? 'Jongen' : 'Meisje'}
+                                Geslacht is bekend: ${match.geslacht === 'M' ? 'Jongen' : 'Meisje'}
                             </div>
                             <input type="hidden" name="geslacht" value="${match.geslacht}">
                         `;
                         document.getElementById('subtitle').innerText = 'Bijna klaar! Bevestig je rol.';
                     }
-                } catch(e) { console.log('Gender check overgeslagen'); }
+                } catch(e) { console.log('Gender check overgeslagen', e); }
             })();
 
             document.getElementById('setupForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
+
+                if(!targetSchoolId) return;
 
                 const submitBtn = document.getElementById('submitBtn');
                 const submitText = document.getElementById('submitText');
                 const submitSpinner = document.getElementById('submitSpinner');
                 const errorBox = document.getElementById('loginError');
 
-                // Loading state
                 submitBtn.disabled = true;
                 submitText.innerText = 'Bezig...';
                 submitSpinner.classList.remove('hidden');
@@ -218,50 +225,58 @@ if (isset($_GET['code'])) {
                 const geslacht = geslachtEl.value;
 
                 let studentId = ssId;
+                
+                // Haal de specifieke namen en slugs op om de sessie volledig in te vullen
+                let sSlug = 'school', sNaam = 'School', rSlug = 'reis', rNaam = 'Reis';
+                try {
+                    if (targetSchoolId) {
+                        const { data: sData } = await window.dbApi.supabaseClient.from('school').select('*').eq('id', targetSchoolId).maybeSingle();
+                        if (sData) { sSlug = sData.slug; sNaam = sData.naam; }
+                    }
+                    if (targetReisId) {
+                        const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('*').eq('id', targetReisId).maybeSingle();
+                        if (rData) { rSlug = rData.slug; rNaam = rData.naam; }
+                    }
+                } catch(err) { console.warn("Context ophalen faalde", err); }
 
                 try {
                     if (isLeerkracht) {
-                        // Verifieer het leerkracht wachtwoord via de database
                         const password = document.getElementById('teacherPassword').value;
                         if (!password) {
                             errorBox.innerText = 'Vul het leerkracht-wachtwoord in.';
                             errorBox.classList.remove('hidden');
-                            submitBtn.disabled = false;
-                            submitText.innerText = 'Doorgaan';
-                            submitSpinner.classList.add('hidden');
+                            submitBtn.disabled = false; submitText.innerText = 'Doorgaan'; submitSpinner.classList.add('hidden');
                             return;
                         }
 
-                        const isValid = await window.dbApi.verifyTeacherPassword(password);
+                        const isValid = await window.dbApi.verifyTeacherPassword(password, targetSchoolId);
                         if (!isValid) {
                             errorBox.innerText = 'Ongeldig leerkracht-wachtwoord. Probeer het opnieuw of neem contact op met de beheerder.';
                             errorBox.classList.remove('hidden');
-                            submitBtn.disabled = false;
-                            submitText.innerText = 'Doorgaan';
-                            submitSpinner.classList.add('hidden');
+                            submitBtn.disabled = false; submitText.innerText = 'Doorgaan'; submitSpinner.classList.add('hidden');
                             return;
                         }
 
-                        await window.dbApi.login(naam, vnaam, geslacht, true, studentId);
+                        await window.dbApi.login(naam, vnaam, geslacht, true, studentId, targetSchoolId, sSlug, sNaam, targetReisId, rSlug, rNaam);
                         window.location.href = 'admin.html';
                     } else {
-                        const alleLeerlingen = await window.dbApi.getAllLeerlingen();
-                        const match = alleLeerlingen.find(l =>
+                        const { data: alleLeerlingen } = await window.dbApi.supabaseClient.from('persoon').select('*').eq('school_id', targetSchoolId).eq('rol', 'LEERLING');
+                        const match = (alleLeerlingen || []).find(l =>
                             l.vnaam.toLowerCase() === vnaam.toLowerCase() &&
                             l.naam.toLowerCase() === naam.toLowerCase()
                         );
 
                         if (match) {
                             studentId = match.id;
-                            await window.dbApi.login(naam, vnaam, geslacht, false, studentId);
+                            await window.dbApi.login(naam, vnaam, geslacht, false, studentId, targetSchoolId, sSlug, sNaam, targetReisId, rSlug, rNaam);
                             window.location.href = 'index.html';
                         } else {
-                            errorBox.innerText = 'Je staat nog niet in de leerlingenlijst. Vraag je leerkracht om je eerst toe te voegen via de CSV-import.';
+                            errorBox.innerText = 'Je staat nog niet in de leerlingenlijst. Vraag je leerkracht om je eerst toe te voegen.';
                             errorBox.classList.remove('hidden');
                         }
                     }
                 } catch (err) {
-                    errorBox.innerText = 'Er ging iets mis. Probeer het opnieuw.';
+                    errorBox.innerText = 'Er ging iets mis met het verbinden met de database. Probeer het opnieuw.';
                     errorBox.classList.remove('hidden');
                     console.error('Login error:', err);
                 }
@@ -276,7 +291,6 @@ if (isset($_GET['code'])) {
     <?php
     exit;
 }
-
 
 // Standaard landingspagina met test-knop
 ?>
