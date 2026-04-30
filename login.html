@@ -162,10 +162,17 @@
                 return;
             }
 
+            // AANGEPAST: Haal de huidige school/reis info op voor de sessie
+            const params = new URLSearchParams(window.location.search);
+            const schoolSlug = params.get('school');
+            const reisSlug = params.get('reis');
+            const schoolNaam = document.getElementById('loginSubTitle').innerText;
+            const reisNaam = document.getElementById('loginMainTitle').innerText;
+            const reisId = localStorage.getItem('selected_trip_id');
+
             try {
                 if (isLeerkracht) {
                     const pw = document.getElementById('dev_pw').value;
-                    // Mock session voor password check (aangezien RPC afhankelijk is van current_user in sommige implementaties, we gebruiken de lokale api direct indien deze p_school_id toelaat)
                     const { data: isValid } = await window.dbApi.supabaseClient.rpc('verify_teacher_password', { p_password: pw, p_school_id: currentSchoolId });
                     
                     if (!isValid) {
@@ -173,7 +180,8 @@
                         errorBox.classList.remove('hidden');
                         return;
                     }
-                    await window.dbApi.login(naam, vnaam, geslacht, true, "dev_lk_" + Date.now(), currentSchoolId);
+                    // AANGEPAST: Geef de extra parameters door aan login()
+                    await window.dbApi.login(naam, vnaam, geslacht, true, "dev_lk_" + Date.now(), currentSchoolId, schoolSlug, schoolNaam, reisId, reisSlug, reisNaam);
                     window.location.href = 'admin.html';
                 } else {
                     const { data: alleLeerlingen } = await window.dbApi.supabaseClient
@@ -188,7 +196,8 @@
                     );
 
                     if (match) {
-                        await window.dbApi.login(naam, vnaam, geslacht, false, match.id, currentSchoolId);
+                        // AANGEPAST: Geef de extra parameters door aan login()
+                        await window.dbApi.login(naam, vnaam, geslacht, false, match.id, currentSchoolId, schoolSlug, schoolNaam, reisId, reisSlug, reisNaam);
                         window.location.href = 'index.html';
                     } else {
                         errorBox.innerHTML = "Persoon niet gevonden in de database van deze school.";
