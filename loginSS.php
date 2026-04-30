@@ -13,6 +13,7 @@ $host = $_SERVER['HTTP_HOST'];
 $pad = $_SERVER['PHP_SELF'];
 
 $redirect_uri = $protocol . $host . $pad;
+
 // Stap 1: redirect naar externe login
 if (isset($_GET['aanmelden'])) {
     // NIEUW: Sla de school en reis context op in de sessie VOORDAT we naar Smartschool gaan
@@ -69,7 +70,6 @@ if (isset($_GET['code'])) {
     $api_groupinfo_url = 'https://leerstof.be/campussintursula/groupinfo.php?access_token=' . urlencode($access_token);
     $groupinfo = json_decode(file_get_contents($api_groupinfo_url), true);
     
-    // (Jouw originele code: opslaan in sessie)
     if(isset($userinfo['userID'])) {
         $_SESSION['userID'] = $userinfo['userID'];
         $_SESSION['first_name'] = $userinfo['name'];
@@ -83,7 +83,7 @@ if (isset($_GET['code'])) {
     }
 
     // -------------------------------------------------------------------------
-    // Stap 5: Profiel Afronden (Geslacht & Rol vragen)
+    // Stap 5: Automatisch Inloggen (Geen formulier meer nodig)
     // -------------------------------------------------------------------------
     
     $voornaam = isset($userinfo['name']) ? htmlspecialchars($userinfo['name'], ENT_QUOTES) : '';
@@ -96,68 +96,29 @@ if (isset($_GET['code'])) {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Rond je profiel af</title>
+        <title>Aanmelden...</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
             body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
-            .slide-down {
-                max-height: 0;
-                overflow: hidden;
-                transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
-                opacity: 0;
-            }
-            .slide-down.open {
-                max-height: 200px;
-                opacity: 1;
-            }
         </style>
     </head>
     <body class="min-h-screen flex items-center justify-center p-4">
-        <div class="bg-white w-full max-w-md rounded-2xl p-8 shadow-xl border border-gray-100">
-            <h2 class="text-2xl font-bold text-gray-800 mb-2">Welkom, <?php echo $voornaam; ?>!</h2>
-            <p class="text-gray-500 mb-6" id="subtitle">Om verder te gaan, hebben we nog even je geslacht en rol nodig.</p>
+        <div class="bg-white w-full max-w-md rounded-2xl p-8 shadow-xl border border-gray-100 text-center">
             
-            <form id="setupForm" class="space-y-6">
-                <div id="geslachtField">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Ik ben een...</label>
-                    <div class="grid grid-cols-2 gap-4">
-                        <label class="cursor-pointer relative">
-                            <input type="radio" name="geslacht" value="M" class="peer sr-only" checked>
-                            <div class="text-center px-4 py-3 rounded-xl border-2 border-gray-200 peer-checked:bg-blue-50 peer-checked:border-blue-500 peer-checked:text-blue-700 font-medium text-gray-500 transition hover:bg-gray-50">
-                                Jongen
-                            </div>
-                        </label>
-                        <label class="cursor-pointer relative">
-                            <input type="radio" name="geslacht" value="V" class="peer sr-only">
-                            <div class="text-center px-4 py-3 rounded-xl border-2 border-gray-200 peer-checked:bg-blue-50 peer-checked:border-blue-500 peer-checked:text-blue-700 font-medium text-gray-500 transition hover:bg-gray-50">
-                                Meisje
-                            </div>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="flex items-center mt-4 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                    <input type="checkbox" id="isLeerkracht" class="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer">
-                    <label for="isLeerkracht" class="ml-2 text-sm text-gray-600 font-medium cursor-pointer">Ik ben een leerkracht</label>
-                </div>
-
-                <div id="teacherPasswordSection" class="slide-down">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Leerkracht Wachtwoord</label>
-                    <div class="relative">
-                        <input type="password" id="teacherPassword" placeholder="Voer het leerkracht-wachtwoord in..." class="w-full border border-gray-300 p-3 rounded-xl focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition pr-10">
-                        <svg class="w-5 h-5 text-gray-400 absolute right-3 top-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
-                    </div>
-                    <p class="text-xs text-gray-400 mt-1">Vraag het wachtwoord aan de beheerder.</p>
-                </div>
-
-                <div id="loginError" class="hidden bg-red-50 text-red-700 p-3 rounded-xl text-sm border border-red-200 font-medium"></div>
-
-                <button type="submit" id="submitBtn" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
-                    <span id="submitText">Doorgaan</span>
-                    <svg id="submitSpinner" class="hidden w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
-                </button>
-            </form>
+            <svg id="loadingSpinner" class="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+            </svg>
+            
+            <h2 id="statusTitle" class="text-xl font-bold text-gray-800 mb-2">Bezig met inloggen...</h2>
+            <p id="statusDesc" class="text-sm text-gray-500">We controleren je gegevens, een moment geduld.</p>
+            
+            <div id="loginError" class="hidden mt-4 bg-red-50 text-red-700 p-4 rounded-xl text-sm border border-red-200 font-medium text-left"></div>
+            
+            <button id="backBtn" onclick="window.location.href='login.html'" class="hidden mt-6 w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 px-4 rounded-xl transition">
+                Terug naar het inlogscherm
+            </button>
         </div>
 
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -168,123 +129,56 @@ if (isset($_GET['code'])) {
             const naam = "<?php echo addslashes($achternaam); ?>";
             const ssId = "<?php echo addslashes($ssUserID); ?>";
             
-            // Haal de opgeslagen school/reis ID's op uit de sessie via PHP
             const targetSchoolId = <?php echo isset($_SESSION['ss_login_school']) ? intval($_SESSION['ss_login_school']) : 'null'; ?>;
             const targetReisId = <?php echo isset($_SESSION['ss_login_reis']) ? intval($_SESSION['ss_login_reis']) : 'null'; ?>;
 
-            if (!targetSchoolId) {
-                alert("Fout: Geen school context gevonden. Gelieve de juiste link te gebruiken.");
+            function showError(msg) {
+                document.getElementById('loadingSpinner').classList.add('hidden');
+                document.getElementById('statusTitle').innerText = "Inloggen mislukt";
+                document.getElementById('statusDesc').classList.add('hidden');
+                
+                const errorBox = document.getElementById('loginError');
+                errorBox.innerText = msg;
+                errorBox.classList.remove('hidden');
+                
+                document.getElementById('backBtn').classList.remove('hidden');
             }
 
-            document.getElementById('isLeerkracht').addEventListener('change', function() {
-                const section = document.getElementById('teacherPasswordSection');
-                if (this.checked) section.classList.add('open');
-                else section.classList.remove('open');
-            });
+            async function autoLogin() {
+                if (!targetSchoolId || !targetReisId) {
+                    return showError("Fout: Geen school of activiteit context gevonden. Gelieve opnieuw via de juiste link te starten.");
+                }
 
-            // Check of geslacht al bekend is in de database (direct via Supabase omdat user nog niet actief is)
-            (async function checkExistingGender() {
-                if(!targetSchoolId) return;
                 try {
-                    const { data: alleLeerlingen } = await window.dbApi.supabaseClient.from('persoon').select('*').eq('school_id', targetSchoolId);
+                    let sSlug = 'school', sNaam = 'School', rSlug = 'reis', rNaam = 'Reis';
+                    
+                    const { data: sData } = await window.dbApi.supabaseClient.from('school').select('*').eq('id', targetSchoolId).maybeSingle();
+                    if (sData) { sSlug = sData.slug; sNaam = sData.naam; }
+                    
+                    const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('*').eq('id', targetReisId).maybeSingle();
+                    if (rData) { rSlug = rData.slug; rNaam = rData.naam; }
+
+                    const { data: alleLeerlingen } = await window.dbApi.supabaseClient.from('persoon').select('*').eq('school_id', targetSchoolId).eq('rol', 'LEERLING');
+                    
+                    // We checken de database of de persoon door de admin is toegevoegd
                     const match = (alleLeerlingen || []).find(l =>
                         l.vnaam.toLowerCase() === vnaam.toLowerCase() &&
                         l.naam.toLowerCase() === naam.toLowerCase()
                     );
-                    
-                    if (match && match.geslacht) {
-                        document.getElementById('geslachtField').innerHTML = `
-                            <div class="bg-green-50 text-green-700 p-3 rounded-xl border border-green-200 text-sm font-medium flex items-center gap-2">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
-                                Geslacht is bekend: ${match.geslacht === 'M' ? 'Jongen' : 'Meisje'}
-                            </div>
-                            <input type="hidden" name="geslacht" value="${match.geslacht}">
-                        `;
-                        document.getElementById('subtitle').innerText = 'Bijna klaar! Bevestig je rol.';
-                    }
-                } catch(e) { console.log('Gender check overgeslagen', e); }
-            })();
 
-            document.getElementById('setupForm').addEventListener('submit', async function(e) {
-                e.preventDefault();
-
-                if(!targetSchoolId) return;
-
-                const submitBtn = document.getElementById('submitBtn');
-                const submitText = document.getElementById('submitText');
-                const submitSpinner = document.getElementById('submitSpinner');
-                const errorBox = document.getElementById('loginError');
-
-                submitBtn.disabled = true;
-                submitText.innerText = 'Bezig...';
-                submitSpinner.classList.remove('hidden');
-                errorBox.classList.add('hidden');
-
-                const isLeerkracht = document.getElementById('isLeerkracht').checked;
-                const geslachtEl = document.querySelector('input[name="geslacht"]:checked') || document.querySelector('input[name="geslacht"]');
-                const geslacht = geslachtEl.value;
-
-                let studentId = ssId;
-                
-                // Haal de specifieke namen en slugs op om de sessie volledig in te vullen
-                let sSlug = 'school', sNaam = 'School', rSlug = 'reis', rNaam = 'Reis';
-                try {
-                    if (targetSchoolId) {
-                        const { data: sData } = await window.dbApi.supabaseClient.from('school').select('*').eq('id', targetSchoolId).maybeSingle();
-                        if (sData) { sSlug = sData.slug; sNaam = sData.naam; }
-                    }
-                    if (targetReisId) {
-                        const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('*').eq('id', targetReisId).maybeSingle();
-                        if (rData) { rSlug = rData.slug; rNaam = rData.naam; }
-                    }
-                } catch(err) { console.warn("Context ophalen faalde", err); }
-
-                try {
-                    if (isLeerkracht) {
-                        const password = document.getElementById('teacherPassword').value;
-                        if (!password) {
-                            errorBox.innerText = 'Vul het leerkracht-wachtwoord in.';
-                            errorBox.classList.remove('hidden');
-                            submitBtn.disabled = false; submitText.innerText = 'Doorgaan'; submitSpinner.classList.add('hidden');
-                            return;
-                        }
-
-                        const isValid = await window.dbApi.verifyTeacherPassword(password, targetSchoolId);
-                        if (!isValid) {
-                            errorBox.innerText = 'Ongeldig leerkracht-wachtwoord. Probeer het opnieuw of neem contact op met de beheerder.';
-                            errorBox.classList.remove('hidden');
-                            submitBtn.disabled = false; submitText.innerText = 'Doorgaan'; submitSpinner.classList.add('hidden');
-                            return;
-                        }
-
-                        await window.dbApi.login(naam, vnaam, geslacht, true, studentId, targetSchoolId, sSlug, sNaam, targetReisId, rSlug, rNaam);
-                        window.location.href = 'admin.html';
+                    if (match) {
+                        await window.dbApi.login(naam, vnaam, match.geslacht, false, match.id, targetSchoolId, sSlug, sNaam, targetReisId, rSlug, rNaam);
+                        window.location.href = 'index.html';
                     } else {
-                        const { data: alleLeerlingen } = await window.dbApi.supabaseClient.from('persoon').select('*').eq('school_id', targetSchoolId).eq('rol', 'LEERLING');
-                        const match = (alleLeerlingen || []).find(l =>
-                            l.vnaam.toLowerCase() === vnaam.toLowerCase() &&
-                            l.naam.toLowerCase() === naam.toLowerCase()
-                        );
-
-                        if (match) {
-                            studentId = match.id;
-                            await window.dbApi.login(naam, vnaam, geslacht, false, studentId, targetSchoolId, sSlug, sNaam, targetReisId, rSlug, rNaam);
-                            window.location.href = 'index.html';
-                        } else {
-                            errorBox.innerText = 'Je staat nog niet in de leerlingenlijst. Vraag je leerkracht om je eerst toe te voegen.';
-                            errorBox.classList.remove('hidden');
-                        }
+                        showError("Je bent niet gevonden in de leerlingenlijst van deze school (" + vnaam + " " + naam + "). Vraag je leerkracht om je eerst toe te voegen in het beheerpaneel.");
                     }
                 } catch (err) {
-                    errorBox.innerText = 'Er ging iets mis met het verbinden met de database. Probeer het opnieuw.';
-                    errorBox.classList.remove('hidden');
                     console.error('Login error:', err);
+                    showError("Er is een verbindingsfout met de database opgetreden. Probeer het later opnieuw.");
                 }
+            }
 
-                submitBtn.disabled = false;
-                submitText.innerText = 'Doorgaan';
-                submitSpinner.classList.add('hidden');
-            });
+            document.addEventListener('DOMContentLoaded', autoLogin);
         </script>
     </body>
     </html>
