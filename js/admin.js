@@ -3,11 +3,15 @@
 class AdminApp {
     constructor() {
         this.user = window.dbApi.getCurrentUser();
-        if (!this.user || !this.user.isLeerkracht) {
+        // Als de gebruiker er niet is of geen leerkracht is EN we zijn niet net ingelogd via de overlay, stop
+        if ((!this.user || !this.user.isLeerkracht) && !document.getElementById('adminLoginScreen')) {
             alert("Toegang geweigerd. Alleen voor leerkrachten.");
             window.location.href = 'login.html';
             return;
         }
+
+        // Voorkom initialisatie fouten als de dummy user actief is vanuit de login overlay
+        if (this.user && this.user.dummy) return;
 
         this.currentTab = 'reizen'; 
         this.hotels = [];
@@ -17,6 +21,8 @@ class AdminApp {
     }
 
     async init() {
+        if(!this.user) return; // Dubbele check
+
         document.getElementById('userInfo').innerText = `Admin: ${this.user.vnaam} ${this.user.naam}`;
         
         const settings = await window.dbApi.getAppSettings();
@@ -25,7 +31,7 @@ class AdminApp {
             if (document.getElementById('pageTitle')) document.title = settings.app_title + " Beheer";
         }
 
-        // Haalt enkel de reizen en hotels van de EIGEN school op (via dbApi update die we nog doen)
+        // Haalt enkel de reizen en hotels van de EIGEN school op
         this.reizen = await window.dbApi.getReizen(false);
         this.hotels = await window.dbApi.getHotels(false);
         
@@ -74,7 +80,7 @@ class AdminApp {
             .subscribe();
 
         setInterval(() => {
-            this.refreshCurrentTab();
+            if(this.user && !this.user.dummy) this.refreshCurrentTab();
         }, 5000);
     }
 
@@ -169,13 +175,12 @@ class AdminApp {
         tbody.innerHTML = '';
 
         let baseUrl = window.location.href.split('admin.html')[0];
-        const schoolSlug = this.user.school_slug || 'school'; // Wordt later dynamisch via sessie
+        const schoolSlug = this.user.school_slug || 'school';
 
         this.reizen.forEach(r => {
             const tr = document.createElement('tr');
             tr.className = 'border-b hover:bg-gray-50 transition';
             
-            // Multi-tenant link structuur
             const fullLink = `${baseUrl}login.html?school=${schoolSlug}&reis=${r.slug}`;
 
             tr.innerHTML = `
@@ -634,7 +639,6 @@ class AdminApp {
             </div>
         `;
         
-        // Zorg dat saveModal dit oppikt
         const oldSave = this.saveModal.bind(this);
         this.saveModal = async () => {
             if(this.editContext && this.editContext.type === 'leerling') {
@@ -651,7 +655,6 @@ class AdminApp {
                 } else {
                     this.showAlert("Fout bij aanpassen leerling.", "error");
                 }
-                // Restore original saveModal
                 this.saveModal = oldSave;
             } else {
                 oldSave();
@@ -748,7 +751,7 @@ class AdminApp {
             const hTitle = sheet.getCell(currentRow, colStart);
             hTitle.value = kamersPerHotel[hotelId].naam;
             hTitle.font = { size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
-            hTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } }; // Zakelijk donkergrijs
+            hTitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF374151' } }; 
             hTitle.alignment = { horizontal: 'center' };
             currentRow++;
 
@@ -766,7 +769,6 @@ class AdminApp {
                 const namen = k.reservaties.map(r => r.gebruiker ? `${r.gebruiker.vnaam} ${r.gebruiker.naam}` : '?').join(', ');
                 const rowData = [ k.kamer_nr, k.capaciteit, k.bezet, namen ];
 
-                // Subtielere kleuren voor het onderscheid (Lichtblauw / Lichtgrijs-roze)
                 const bgColor = k.geslacht === 'M' ? 'FFE0F2FE' : 'FFFCE7F3'; 
 
                 rowData.forEach((val, i) => {
