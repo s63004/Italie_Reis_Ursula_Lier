@@ -22,6 +22,10 @@
         .tab-btn { transition: all 0.2s ease-in-out; }
         .tab-btn.active { background-color: #eff6ff; color: #1d4ed8; border-right: 3px solid #2563eb; }
         input, select { transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out; }
+        /* Custom scrollbar voor de klassen-lijst */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     </style>
 </head>
 <body class="min-h-screen text-slate-800 flex flex-col font-sans">
@@ -90,19 +94,19 @@
                 <nav class="flex flex-col text-sm font-medium text-slate-600">
                     <button onclick="window.adminApp.setTab('reizen')" id="nav-reizen" class="tab-btn flex items-center gap-3 px-6 py-3.5 w-full text-left hover:bg-slate-50 border-b border-slate-50">
                         <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        Hoofdreizen
+                        Activiteiten / Reizen
                     </button>
                     <button onclick="window.adminApp.setTab('bestemmingen')" id="nav-bestemmingen" class="tab-btn flex items-center gap-3 px-6 py-3.5 w-full text-left hover:bg-slate-50 border-b border-slate-50">
                         <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m3-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg>
-                        Bestemmingen
+                        Opties / Locaties
                     </button>
                     <button onclick="window.adminApp.setTab('kamers')" id="nav-kamers" class="tab-btn flex items-center gap-3 px-6 py-3.5 w-full text-left hover:bg-slate-50 border-b border-slate-50">
                         <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>
-                        Kamers Beheren
+                        Plaatsen Beheren
                     </button>
                     <button onclick="window.adminApp.setTab('reservaties')" id="nav-reservaties" class="tab-btn flex items-center gap-3 px-6 py-3.5 w-full text-left hover:bg-slate-50 border-b border-slate-50">
                         <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path></svg>
-                        Actieve Reservaties
+                        Actieve Inschrijvingen
                     </button>
                     <button onclick="window.adminApp.setTab('leerlingen')" id="nav-leerlingen" class="tab-btn flex items-center gap-3 px-6 py-3.5 w-full text-left hover:bg-slate-50 border-b border-slate-50">
                         <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
@@ -126,29 +130,47 @@
 
             <div id="content-reizen" class="hidden">
                 <div class="mb-8 border-b border-slate-100 pb-5">
-                    <h2 class="text-2xl font-bold text-slate-800">Hoofdreizen Beheren</h2>
-                    <p class="text-sm text-slate-500 mt-2">Creëer en beheer de hoofdprojecten of schoolreizen. Stel de unieke web-slug en inlogachtergrond in.</p>
+                    <h2 class="text-2xl font-bold text-slate-800">Activiteiten & Reizen Beheren</h2>
+                    <p class="text-sm text-slate-500 mt-2">Creëer en beheer projecten, uitstappen of activiteiten. Selecteer welke klassen toegang hebben.</p>
                 </div>
 
                 <div class="bg-slate-50 p-5 rounded-xl mb-8 border border-slate-200">
                     <h3 class="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
                         <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                        Nieuwe Reis Registreren
+                        Nieuwe Registreren
                     </h3>
-                    <form id="addReisForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Naam Project</label>
-                            <input type="text" id="r_naam" placeholder="bv. Italië 2026" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white" required>
+                    <form id="addReisForm" class="flex flex-col gap-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Naam Project/Reis</label>
+                                <input type="text" id="r_naam" placeholder="bv. Italië 2026 of Sportdag" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none bg-white" required>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5">URL Slug</label>
+                                <input type="text" id="r_slug" placeholder="bv. italie-2026" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none bg-white" required>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">URL Slug</label>
-                            <input type="text" id="r_slug" placeholder="bv. italie-2026" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white" required>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1.5">Toegestane Klassen</label>
+                                <div id="r_klassen_container" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm bg-white h-24 custom-scrollbar overflow-y-auto flex flex-col gap-1 focus-within:ring-2 focus-within:ring-primary-500">
+                                    <span class="text-slate-400 italic text-xs">Laden...</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Inlog Achtergrond</label>
+                                    <input type="file" id="r_foto" accept="image/*" class="w-full border border-slate-300 px-2.5 py-1.5 rounded-md text-sm shadow-sm bg-white file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer" required>
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Inlog Achtergrond</label>
-                            <input type="file" id="r_foto" accept="image/*" class="w-full border border-slate-300 px-2.5 py-1.5 rounded-md text-sm shadow-sm bg-white file:mr-3 file:py-1 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer" required>
+                        <div class="flex items-center justify-between mt-2 border-t border-slate-200 pt-4">
+                            <div class="flex items-center">
+                                <input type="checkbox" id="r_groepjes" checked class="w-4 h-4 text-primary-600 rounded border-slate-300 focus:ring-primary-500 cursor-pointer">
+                                <label for="r_groepjes" class="ml-2 text-sm font-medium text-slate-700 cursor-pointer">Groepsinschrijvingen / Vrienden toevoegen toestaan</label>
+                            </div>
+                            <button type="submit" class="bg-slate-800 text-white px-6 py-2 rounded-md text-sm font-medium hover:bg-slate-900 transition shadow-sm focus:ring-2 focus:ring-offset-2 focus:ring-slate-900">Aanmaken</button>
                         </div>
-                        <button type="submit" class="w-full bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-900 transition shadow-sm focus:ring-2 focus:ring-offset-2 focus:ring-slate-900">Aanmaken</button>
                     </form>
                 </div>
 
@@ -157,8 +179,8 @@
                         <thead class="bg-slate-50">
                             <tr>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Projectnaam</th>
-                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Slug</th>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Deel Link</th>
+                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Instellingen</th>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Acties</th>
                             </tr>
                         </thead>
@@ -169,22 +191,22 @@
 
             <div id="content-bestemmingen" class="hidden">
                 <div class="mb-8 border-b border-slate-100 pb-5">
-                    <h2 class="text-2xl font-bold text-slate-800">Bestemmingen Configureren</h2>
-                    <p class="text-sm text-slate-500 mt-2">Koppel specifieke hotels of bestemmingen aan een hoofdreis. Deze vormen de tabbladen voor de leerlingen.</p>
+                    <h2 class="text-2xl font-bold text-slate-800">Opties Configureren</h2>
+                    <p class="text-sm text-slate-500 mt-2">Koppel specifieke locaties of opties aan een hoofdreis. Deze vormen de tabbladen voor de leerlingen.</p>
                 </div>
 
                 <div class="bg-slate-50 p-5 rounded-xl mb-8 border border-slate-200">
                     <h3 class="text-sm font-bold text-slate-700 mb-4 flex items-center gap-2">
                         <svg class="w-4 h-4 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                        Nieuwe Bestemming Toevoegen
+                        Nieuwe Optie Toevoegen
                     </h3>
                     <form id="addBestemmingForm" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Koppel aan Reis</label>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Koppel aan Activiteit</label>
                             <select id="b_reis" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white" required></select>
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Naam Hotel/Bestemming</label>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Naam (Hotel / Bus / ...)</label>
                             <input type="text" id="b_naam" placeholder="Naam invoeren" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none bg-white" required>
                         </div>
                         <div>
@@ -199,8 +221,8 @@
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-slate-50">
                             <tr>
-                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Gekoppelde Reis</th>
-                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Bestemming</th>
+                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Activiteit</th>
+                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Optie/Bestemming</th>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Zichtbaar</th>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Acties</th>
                             </tr>
@@ -213,11 +235,11 @@
             <div id="content-kamers" class="hidden">
                 <div class="mb-6 border-b border-slate-100 pb-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h2 class="text-2xl font-bold text-slate-800">Kamers & Capaciteit</h2>
-                        <p class="text-sm text-slate-500 mt-2">Beheer de beschikbare kamers per hotel en stel restricties in.</p>
+                        <h2 class="text-2xl font-bold text-slate-800">Plaatsen & Capaciteit</h2>
+                        <p class="text-sm text-slate-500 mt-2">Beheer de beschikbare plaatsen per optie en stel restricties in.</p>
                     </div>
                     <div class="bg-slate-50 px-4 py-3 rounded-lg border border-slate-200 shadow-sm w-full sm:w-auto">
-                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-1.5">Filter op Bestemming</label>
+                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-1.5">Filter op Optie</label>
                         <select id="filter_k_hotel" onchange="window.adminApp.renderKamers()" class="w-full sm:w-64 border border-slate-300 px-3 py-1.5 rounded-md text-sm focus:ring-primary-500 focus:border-primary-500 bg-white"></select>
                     </div>
                 </div>
@@ -227,11 +249,11 @@
                     <h3 class="text-sm font-bold text-slate-700 mb-4">Bulk Toevoegen</h3>
                     <form id="addKamerForm" class="grid grid-cols-2 md:grid-cols-6 gap-4 items-end">
                         <div class="col-span-2">
-                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Bestemming</label>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Optie</label>
                             <select id="k_hotel" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none bg-white"></select>
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Start Nr</label>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Start Nr / Letter</label>
                             <input type="text" id="k_nr" placeholder="bv. 101" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none" required>
                         </div>
                         <div>
@@ -243,14 +265,15 @@
                             <select id="k_geslacht" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none bg-white">
                                 <option value="M">Jongens</option>
                                 <option value="V">Meisjes</option>
+                                <option value="X">Gemengd (X)</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Capaciteit</label>
-                            <input type="number" id="k_cap" min="1" max="10" value="3" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none" required>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1.5">Plaatsen/Cap.</label>
+                            <input type="number" id="k_cap" min="1" max="100" value="3" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none" required>
                         </div>
                         <div class="col-span-2 md:col-span-6 flex justify-end mt-2">
-                            <button type="submit" class="bg-primary-600 text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-primary-700 transition shadow-sm">Kamers Genereren</button>
+                            <button type="submit" class="bg-primary-600 text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-primary-700 transition shadow-sm">Plaatsen Genereren</button>
                         </div>
                     </form>
                 </div>
@@ -259,8 +282,8 @@
                     <table class="min-w-full divide-y divide-slate-200 text-left">
                         <thead class="bg-slate-50">
                             <tr>
-                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Kamer</th>
-                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Bestemming</th>
+                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Kamer / Groep</th>
+                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Optie</th>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Beheer</th>
@@ -273,8 +296,8 @@
 
             <div id="content-reservaties" class="hidden">
                 <div class="mb-8 border-b border-slate-100 pb-5">
-                    <h2 class="text-2xl font-bold text-slate-800">Actieve Reservaties</h2>
-                    <p class="text-sm text-slate-500 mt-2">Real-time overzicht van kamerbezetting. Annuleer specifieke toewijzingen indien nodig.</p>
+                    <h2 class="text-2xl font-bold text-slate-800">Actieve Inschrijvingen</h2>
+                    <p class="text-sm text-slate-500 mt-2">Real-time overzicht van bezetting. Annuleer specifieke toewijzingen indien nodig.</p>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="resGrid"></div>
             </div>
@@ -284,6 +307,12 @@
                     <div>
                         <h2 class="text-2xl font-bold text-slate-800">Personen Database</h2>
                         <p class="text-sm text-slate-500 mt-2">Beheer de accounts van leerlingen en begeleiders met toegang tot de reizen.</p>
+                    </div>
+                    <div class="bg-slate-50 px-4 py-3 rounded-lg border border-slate-200 shadow-sm w-full sm:w-auto">
+                        <label class="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-1.5">Filter op Klas</label>
+                        <select id="filter_l_klas" class="w-full sm:w-48 border border-slate-300 px-3 py-1.5 rounded-md text-sm focus:ring-primary-500 focus:border-primary-500 bg-white">
+                            <option value="">--- Alle klassen ---</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -301,12 +330,26 @@
                                     <input type="text" id="l_naam" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none" required>
                                 </div>
                             </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Klas</label>
+                                    <input type="text" id="l_klas" placeholder="bv. 6BIW" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Rol</label>
+                                    <select id="l_rol" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm bg-white focus:ring-2 focus:ring-primary-500 outline-none">
+                                        <option value="LEERLING">Student / Leerling</option>
+                                        <option value="LEERKRACHT">Begeleider / Leerkracht</option>
+                                    </select>
+                                </div>
+                            </div>
                             <div class="grid grid-cols-2 gap-4 items-end">
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-600 mb-1.5">Geslacht</label>
                                     <select id="l_geslacht" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm bg-white focus:ring-2 focus:ring-primary-500 outline-none">
                                         <option value="M">Jongen (M)</option>
                                         <option value="V">Meisje (V)</option>
+                                        <option value="X">Gemengd (X)</option>
                                     </select>
                                 </div>
                                 <button type="submit" class="w-full bg-slate-800 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-slate-900 transition shadow-sm">Aanmaken</button>
@@ -335,7 +378,9 @@
                         <thead class="bg-slate-50">
                             <tr>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Persoon</th>
-                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Details</th>
+                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Klas</th>
+                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Rol</th>
+                                <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Geslacht</th>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Acties</th>
                             </tr>
@@ -353,8 +398,15 @@
                     <div class="w-16 h-16 mx-auto bg-primary-100 rounded-2xl flex items-center justify-center mb-6 transform rotate-3">
                         <svg class="w-8 h-8 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                     </div>
-                    <h3 class="text-xl font-bold text-slate-800 mb-3">Definitieve Kamerverdeling</h3>
-                    <p class="text-sm text-slate-500 mb-8 leading-relaxed">Exporteer de huidige status van alle bestemmingen naar een overzichtelijk en printklaar Excel-document (.xlsx).</p>
+                    <h3 class="text-xl font-bold text-slate-800 mb-3">Definitief Overzicht</h3>
+                    <p class="text-sm text-slate-500 mb-6 leading-relaxed">Exporteer de huidige status van de groepen/kamers naar een overzichtelijk en printklaar Excel-document (.xlsx).</p>
+                    
+                    <div class="mb-6 text-left border-t border-slate-100 pt-6">
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Kies Activiteit (Optioneel)</label>
+                        <select id="export_reis_filter" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                        </select>
+                    </div>
+
                     <button onclick="window.adminApp.exportKamersExcel()" class="w-full inline-flex justify-center items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-6 py-3.5 rounded-lg font-medium shadow-md transition">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
                         Download Rapport
@@ -397,7 +449,7 @@
     <div id="editKamerModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
         <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm border border-slate-100">
             <div class="flex items-center justify-between mb-5">
-                <h3 class="text-lg font-bold text-slate-800">Kamer Configureren</h3>
+                <h3 class="text-lg font-bold text-slate-800">Plaats / Groep Configureren</h3>
                 <button onclick="document.getElementById('editKamerModal').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
@@ -405,7 +457,7 @@
             <input type="hidden" id="edit_k_id">
             <div class="space-y-4">
                 <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Identificatie (Kamer Nr)</label>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Identificatie (Kamer/Groep Nr)</label>
                     <input type="text" id="edit_k_nr" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none">
                 </div>
                 <div class="grid grid-cols-2 gap-4">
@@ -414,10 +466,11 @@
                         <select id="edit_k_geslacht" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm bg-white focus:ring-2 focus:ring-primary-500 outline-none">
                             <option value="M">Jongens</option>
                             <option value="V">Meisjes</option>
+                            <option value="X">Gemengd (X)</option>
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Bedden</label>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Plaatsen</label>
                         <input type="number" id="edit_k_cap" class="w-full border border-slate-300 px-3 py-2 rounded-md text-sm shadow-sm focus:ring-2 focus:ring-primary-500 outline-none">
                     </div>
                 </div>
@@ -450,16 +503,12 @@
     <script src="js/data.js"></script>
     
     <script>
-        // Zorg ervoor dat het formulier getoond wordt als de gebruiker niet is ingelogd
         document.addEventListener('DOMContentLoaded', () => {
             const user = window.dbApi ? window.dbApi.getCurrentUser() : null;
             if (user && user.isLeerkracht) {
                 document.getElementById('adminLoginScreen').classList.add('hidden');
             } else {
                 document.getElementById('adminLoginScreen').classList.remove('hidden');
-                
-                // We voorkomen dat admin.js ons redirect door een tijdelijke mock-user in te stellen
-                // Dit wordt opgelost zodra de gebruiker hier inlogt en de pagina herlaadt.
                 if(window.adminApp) {
                     window.adminApp.user = { isLeerkracht: true, dummy: true };
                 }
@@ -498,7 +547,6 @@
                     return;
                 }
 
-                // Inloggen als admin, pagina herladen om de normale admin.js zijn werk te laten doen
                 await window.dbApi.login('Beheerder', 'Admin', 'M', true, "dev_lk_" + Date.now(), schoolData.id);
                 window.location.reload(); 
             } catch (err) {
