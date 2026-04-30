@@ -26,6 +26,35 @@
 </head>
 <body class="min-h-screen text-slate-800 flex flex-col font-sans">
 
+    <div id="adminLoginScreen" class="fixed inset-0 bg-slate-900 z-50 flex items-center justify-center p-4 transition-opacity duration-300 hidden">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-100">
+            <div class="text-center mb-6">
+                <div class="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center mx-auto mb-4">
+                    <svg class="w-6 h-6 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                </div>
+                <h1 class="text-xl font-bold text-slate-800">Beheerder Toegang</h1>
+                <p class="text-sm text-slate-500 mt-1">Log in om het dashboard te openen</p>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">School Code (Slug)</label>
+                    <input type="text" id="login_school" placeholder="bv. ursula" class="w-full border border-slate-300 px-3 py-2.5 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1.5">Wachtwoord</label>
+                    <input type="password" id="login_pw" placeholder="••••••••" class="w-full border border-slate-300 px-3 py-2.5 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none" onkeydown="if(event.key === 'Enter') handleAdminLogin()">
+                </div>
+                
+                <div id="login_error" class="hidden text-red-600 text-xs font-medium bg-red-50 p-3 rounded-lg border border-red-100 text-center"></div>
+                
+                <button onclick="handleAdminLogin()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-2.5 rounded-lg transition shadow-sm mt-2">
+                    Inloggen
+                </button>
+            </div>
+        </div>
+    </div>
+
     <nav class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-40">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
@@ -419,6 +448,66 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/config.js"></script>
     <script src="js/data.js"></script>
+    
+    <script>
+        // Zorg ervoor dat het formulier getoond wordt als de gebruiker niet is ingelogd
+        document.addEventListener('DOMContentLoaded', () => {
+            const user = window.dbApi ? window.dbApi.getCurrentUser() : null;
+            if (user && user.isLeerkracht) {
+                document.getElementById('adminLoginScreen').classList.add('hidden');
+            } else {
+                document.getElementById('adminLoginScreen').classList.remove('hidden');
+                
+                // We voorkomen dat admin.js ons redirect door een tijdelijke mock-user in te stellen
+                // Dit wordt opgelost zodra de gebruiker hier inlogt en de pagina herlaadt.
+                if(window.adminApp) {
+                    window.adminApp.user = { isLeerkracht: true, dummy: true };
+                }
+            }
+        });
+
+        async function handleAdminLogin() {
+            const school = document.getElementById('login_school').value.trim().toLowerCase();
+            const pw = document.getElementById('login_pw').value;
+            const errorBox = document.getElementById('login_error');
+            
+            errorBox.classList.add('hidden');
+            
+            if (!school || !pw) {
+                errorBox.innerText = "Vul school code en wachtwoord in.";
+                errorBox.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const schoolData = await window.dbApi.getSchoolBySlug(school);
+                if (!schoolData) {
+                    errorBox.innerText = "School niet gevonden.";
+                    errorBox.classList.remove('hidden');
+                    return;
+                }
+
+                const { data: isValid } = await window.dbApi.supabaseClient.rpc('verify_teacher_password', { 
+                    p_password: pw, 
+                    p_school_id: schoolData.id 
+                });
+
+                if (!isValid) {
+                    errorBox.innerText = "Onjuist wachtwoord.";
+                    errorBox.classList.remove('hidden');
+                    return;
+                }
+
+                // Inloggen als admin, pagina herladen om de normale admin.js zijn werk te laten doen
+                await window.dbApi.login('Beheerder', 'Admin', 'M', true, "dev_lk_" + Date.now(), schoolData.id);
+                window.location.reload(); 
+            } catch (err) {
+                errorBox.innerText = "Systeemfout bij inloggen.";
+                errorBox.classList.remove('hidden');
+            }
+        }
+    </script>
+    
     <script src="js/admin.js"></script>
 </body>
 </html>
