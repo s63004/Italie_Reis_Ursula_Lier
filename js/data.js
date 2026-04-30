@@ -191,7 +191,9 @@ async function initializeDB() {
 }
 
 // --- AUTHENTICATIE & LOGIN ---
-async function login(naam, vnaam, geslacht, isLeerkracht = false, studentId = null, schoolId = null) {
+
+// AANGEPAST: De login functie is uitgebreid om de school en reis context op te slaan
+async function login(naam, vnaam, geslacht, isLeerkracht = false, studentId = null, schoolId = null, schoolSlug = null, schoolNaam = null, reisId = null, reisSlug = null, reisNaam = null) {
     let internalId = null;
     let rol = isLeerkracht ? 'LEERKRACHT' : 'LEERLING';
 
@@ -229,8 +231,14 @@ async function login(naam, vnaam, geslacht, isLeerkracht = false, studentId = nu
 
     if (!internalId) return null;
 
-    const { data: schoolData } = await supabaseClient.from('school').select('slug').eq('id', schoolId).maybeSingle();
+    // Haal school_slug op voor de zekerheid als deze niet is meegegeven
+    let finalSchoolSlug = schoolSlug;
+    if (!finalSchoolSlug) {
+        const { data: schoolData } = await supabaseClient.from('school').select('slug').eq('id', schoolId).maybeSingle();
+        finalSchoolSlug = schoolData ? schoolData.slug : 'school';
+    }
 
+    // NIEUW: Alle context data wordt nu opgeslagen in de sessie
     const sessionData = { 
         id: internalId, 
         ss_id: studentId, 
@@ -239,14 +247,19 @@ async function login(naam, vnaam, geslacht, isLeerkracht = false, studentId = nu
         geslacht: geslacht, 
         isLeerkracht: isLeerkracht,
         school_id: schoolId,
-        school_slug: schoolData ? schoolData.slug : 'school'
+        school_slug: finalSchoolSlug,
+        school_naam: schoolNaam,
+        reis_id: reisId,
+        reis_slug: reisSlug,
+        reis_naam: reisNaam
     };
     
     localStorage.setItem('currentUser', JSON.stringify(sessionData));
-    await writeLog('LOGIN', internalId, `Ingelogd als ${rol}`);
+    await writeLog('LOGIN', internalId, `Ingelogd bij ${schoolNaam || 'school'} voor ${reisNaam || 'reis'}`);
 
     return sessionData;
 }
+// EINDE AANPASSING
 
 async function searchStudentForLogin(query, schoolId) {
     if (!query || query.length < 2 || !schoolId) return [];
