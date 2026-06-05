@@ -29,17 +29,21 @@ class App {
         if (this.user && (!this.user.reis_naam || !this.user.school_naam)) {
             console.log("Data in sessie incompleet, database wordt geraadpleegd...");
             const { data: sData } = await window.dbApi.supabaseClient.from('school').select('naam, slug').eq('id', this.user.school_id).maybeSingle();
-            const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('naam, slug, sta_groepjes_toe').eq('id', this.user.reis_id).maybeSingle();
+            const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('naam, slug, sta_groepjes_toe, inschrijving_start, is_bevroren, type').eq('id', this.user.reis_id).maybeSingle();
             if(sData) this.user.school_naam = sData.naam;
             if(rData) {
                 this.user.reis_naam = rData.naam;
-                this.sta_groepjes_toe = rData.sta_groepjes_toe !== false; // Zet op false als database dat zegt
+                this.sta_groepjes_toe = rData.type === 'activiteit' ? false : (rData.sta_groepjes_toe !== false);
+                this.reisData = rData;
             }
             localStorage.setItem('currentUser', JSON.stringify(this.user));
         } else {
             // Check toch even de groepjes-instelling als de sessie er al was
-            const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('sta_groepjes_toe').eq('id', this.user.reis_id).maybeSingle();
-            if(rData) this.sta_groepjes_toe = rData.sta_groepjes_toe !== false;
+            const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('sta_groepjes_toe, inschrijving_start, is_bevroren, type').eq('id', this.user.reis_id).maybeSingle();
+            if(rData) {
+                this.sta_groepjes_toe = rData.type === 'activiteit' ? false : (rData.sta_groepjes_toe !== false);
+                this.reisData = rData;
+            }
         }
 
         document.getElementById('userInfo').innerText = `${this.user.vnaam} ${this.user.naam}`;
@@ -68,6 +72,19 @@ class App {
 
         setInterval(async () => {
             await window.dbApi.checkTimeouts();
+            
+            // Haal de laatste freeze status op (optioneel, maar wel handig voor live updates)
+            if (this.user && this.user.reis_id) {
+                const { data: rData } = await window.dbApi.supabaseClient.from('reis').select('is_bevroren, inschrijving_start, type').eq('id', this.user.reis_id).maybeSingle();
+                if (rData) {
+                    if (!this.reisData) this.reisData = {};
+                    this.reisData.is_bevroren = rData.is_bevroren;
+                    this.reisData.inschrijving_start = rData.inschrijving_start;
+                    this.reisData.type = rData.type;
+                    if (rData.type === 'activiteit') this.sta_groepjes_toe = false;
+                }
+            }
+
             this.render(); 
         }, 5000);
 
@@ -158,13 +175,15 @@ class App {
     // --- NIEUW: De Zwevende Bevestigings-Modal ---
     showConfirmModal(kamerNr, onConfirmCallback) {
         const modalId = 'confirmModal_' + Date.now();
+        const isActiviteit = this.reisData && this.reisData.type === 'activiteit';
+        const titleText = isActiviteit ? 'Inschrijving bevestigen?' : `Kamer ${kamerNr} bevestigen?`;
         const modalHtml = `
             <div id="${modalId}" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm opacity-0 transition-opacity duration-300">
                 <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 transform scale-95 transition-transform duration-300 mx-4">
                     <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mb-4 text-xl mx-auto">
                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
                     </div>
-                    <h3 class="text-xl font-bold text-center text-slate-800 mb-2">Kamer ${kamerNr} bevestigen?</h3>
+                    <h3 class="text-xl font-bold text-center text-slate-800 mb-2">${titleText}</h3>
                     <p class="text-center text-slate-500 text-sm mb-6">Je keuze is definitief en kan later niet aangepast worden.</p>
                     <div class="flex gap-3">
                         <button id="btnCancel_${modalId}" class="flex-1 bg-white border border-slate-300 text-slate-700 font-medium py-2.5 rounded-xl hover:bg-slate-50 transition text-sm">Nee, terug</button>
@@ -204,6 +223,31 @@ class App {
         const overlay = document.getElementById('cardOverlay');
         const container = document.getElementById('kamersContainer');
         const kamers = await window.dbApi.getKamersMetStatus(this.currentHotelId, this.user.geslacht);
+
+        // --- NIEUW: LOGICA VOOR BEVRIEZEN & STARTDATUM ---
+        const serverTijd = window.dbApi.getEstimatedServerTime(); // Gecorrigeerde servertijd
+        const reis = this.reisData || {};
+        let inschrijvingGeopend = true;
+        let isBevroren = !!reis.is_bevroren;
+
+        if (reis.inschrijving_start) {
+            inschrijvingGeopend = serverTijd >= new Date(reis.inschrijving_start).getTime();
+        }
+        
+        const isReadOnly = isBevroren || !inschrijvingGeopend;
+
+        if (isBevroren && !this._freezeAlertShown) {
+            this.showAlert("De inschrijvingen zijn officieel gesloten door de beheerder. Je kunt de indeling alleen bekijken.", "info");
+            this._freezeAlertShown = true;
+            this._notOpenAlertShown = false; // Reset
+        } else if (!isBevroren && !inschrijvingGeopend && !this._notOpenAlertShown) {
+            this.showAlert(`De kamerindeling opent op ${new Date(reis.inschrijving_start).toLocaleString('nl-BE')}`, "info");
+            this._notOpenAlertShown = true;
+            this._freezeAlertShown = false; // Reset
+        } else if (!isBevroren && inschrijvingGeopend) {
+            this._notOpenAlertShown = false;
+            this._freezeAlertShown = false;
+        }
 
         let userRes = null;
         for (let kamer of kamers) {
@@ -391,11 +435,17 @@ class App {
                 buttonHtml = `<button disabled class="w-full mt-auto bg-gray-100 text-gray-400 font-medium py-2.5 rounded-lg border border-gray-200 text-sm cursor-not-allowed flex items-center justify-center gap-2">
                     Niet beschikbaar
                 </button>`;
+            } else if (isReadOnly) {
+                buttonHtml = `<button disabled class="w-full mt-auto bg-gray-100 text-gray-400 font-medium py-2.5 rounded-lg border border-gray-200 text-sm cursor-not-allowed flex items-center justify-center gap-2">
+                    Gesloten
+                </button>`;
             } else if (hasPending || hasConfirmed) {
                 buttonHtml = `<button disabled class="w-full mt-auto bg-gray-50 text-gray-400 font-medium py-2.5 rounded-lg border border-gray-100 text-sm cursor-not-allowed">Geen actie mogelijk</button>`;
             } else if (!isFull) {
+                const isActiviteit = this.reisData && this.reisData.type === 'activiteit';
+                const btnText = isActiviteit ? 'Schrijf mij in voor deze activiteit' : 'Kies deze plaats';
                 buttonHtml = `<button onclick="window.app.promptJoin(${kamer.id}, '${kamer.kamer_nr}')" class="w-full mt-auto bg-white border border-blue-200 hover:border-blue-600 hover:bg-blue-50 text-blue-600 font-medium py-2.5 rounded-lg transition-all duration-200 text-sm flex items-center justify-center gap-2">
-                    Kies deze plaats
+                    ${btnText}
                 </button>`;
             } else {
                 buttonHtml = `<button disabled class="w-full mt-auto bg-gray-50 text-gray-400 font-medium py-2.5 rounded-lg border border-gray-200 text-sm cursor-not-allowed">Volzet</button>`;
