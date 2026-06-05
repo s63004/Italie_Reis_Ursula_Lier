@@ -109,18 +109,14 @@ async function getReisBySlug(slug, schoolId) {
 }
 
 // NIEUW: parameters toegestane_klassen en sta_groepjes_toe toegevoegd
-async function addReis(naam, slug, login_bg, toegestane_klassen = '*', sta_groepjes_toe = true) {
+async function addReis(reisConfig) {
     const u = getCurrentUser();
     if (!u) return { success: false, message: "Niet ingelogd." };
 
     const insertData = { 
-        naam, 
-        slug, 
-        login_bg, 
+        ...reisConfig,
         is_actief: false, 
-        school_id: u.school_id,
-        toegestane_klassen: toegestane_klassen,
-        sta_groepjes_toe: sta_groepjes_toe
+        school_id: u.school_id
     };
 
     const { error } = await supabaseClient.from('reis').insert([insertData]);
