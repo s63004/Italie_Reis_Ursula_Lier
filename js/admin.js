@@ -111,33 +111,92 @@ class AdminApp {
         }
 
         let html = `
-            <label class="flex items-center gap-2 cursor-pointer p-1 hover:bg-slate-50 rounded">
-                <input type="checkbox" id="r_klassen_all" value="*" checked class="w-3.5 h-3.5 text-primary-600 rounded border-slate-300">
-                <span class="font-bold text-slate-700 text-xs">Alle klassen (*)</span>
+            <label class="flex items-center gap-2 cursor-pointer p-1.5 hover:bg-slate-50 rounded transition">
+                <input type="checkbox" id="r_klassen_all" value="*" checked class="w-3.5 h-3.5 text-primary-600 rounded border-slate-300 focus:ring-primary-500 cursor-pointer">
+                <span class="font-bold text-slate-800 text-xs">Alle klassen selecteren (*)</span>
             </label>
             <div class="border-t border-slate-100 my-1"></div>
         `;
 
         klassen.forEach(k => {
             html += `
-            <label class="flex items-center gap-2 cursor-pointer ml-1 p-1 hover:bg-slate-50 rounded">
-                <input type="checkbox" name="r_klas_optie" value="${k}" checked class="w-3.5 h-3.5 text-primary-600 rounded border-slate-300">
-                <span class="text-slate-700 text-xs">${k}</span>
+            <label class="klas-item flex items-center gap-2 cursor-pointer ml-1 p-1 hover:bg-slate-50 rounded transition" data-klas="${k.toLowerCase()}">
+                <input type="checkbox" name="r_klas_optie" value="${k}" checked class="w-3.5 h-3.5 text-primary-600 rounded border-slate-300 focus:ring-primary-500 cursor-pointer">
+                <span class="text-slate-700 text-xs font-medium">${k}</span>
             </label>`;
         });
 
         container.innerHTML = html;
 
-        // Logica zodat "Alle klassen" aan- of uitvinkt
+        // --- LOGICA 1: Zoekbalk filter ---
+        const searchInput = document.getElementById('r_klas_zoek');
+        if(searchInput) {
+            searchInput.addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                document.querySelectorAll('.klas-item').forEach(el => {
+                    if(el.dataset.klas.includes(term)) {
+                        el.style.display = 'flex';
+                    } else {
+                        el.style.display = 'none';
+                    }
+                });
+            });
+        }
+
+        // --- LOGICA 2: "Alle klassen" checkbox ---
         const allCb = document.getElementById('r_klassen_all');
         const klasCbs = document.getElementsByName('r_klas_optie');
+        
+        function checkAlleKlassenStatus() {
+            const allemaalAan = Array.from(klasCbs).every(c => c.checked);
+            allCb.checked = allemaalAan;
+        }
+
         allCb.addEventListener('change', (e) => {
-            klasCbs.forEach(cb => cb.checked = e.target.checked);
+            klasCbs.forEach(cb => {
+                // Pas alleen de zichtbare checkboxes aan bij gebruik van de zoekbalk
+                const parent = cb.closest('.klas-item');
+                if (parent.style.display !== 'none') {
+                    cb.checked = e.target.checked;
+                }
+            });
         });
+        
         klasCbs.forEach(cb => {
-            cb.addEventListener('change', () => {
-                if (!cb.checked) allCb.checked = false;
-                if (Array.from(klasCbs).every(c => c.checked)) allCb.checked = true;
+            cb.addEventListener('change', checkAlleKlassenStatus);
+        });
+
+        // --- LOGICA 3: Jaren Snelselectie (1ste, 2de, 6de...) ---
+        document.querySelectorAll('.jaar-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault(); // Voorkom dat formulier submit
+                const jaar = e.target.dataset.jaar; 
+                
+                // Haal alle klassen op die met dit cijfer beginnen (bijv. "6BIW" begint met "6")
+                const relevantCbs = Array.from(klasCbs).filter(cb => cb.value.startsWith(jaar));
+                if(relevantCbs.length === 0) {
+                    // Toon even een visuele waarschuwing als er geen klassen voor dit jaar zijn
+                    const origineleTekst = e.target.innerText;
+                    e.target.innerText = "Geen";
+                    e.target.classList.add('bg-red-50', 'text-red-600', 'border-red-200');
+                    setTimeout(() => {
+                        e.target.innerText = origineleTekst;
+                        e.target.classList.remove('bg-red-50', 'text-red-600', 'border-red-200');
+                    }, 1000);
+                    return;
+                }
+                
+                // Kijk of we ze aan of uit moeten zetten (toggle)
+                const allemaalAan = relevantCbs.every(cb => cb.checked);
+                
+                // Visual feedback op de knop
+                e.target.classList.add('bg-primary-100', 'border-primary-500');
+                setTimeout(() => e.target.classList.remove('bg-primary-100', 'border-primary-500'), 300);
+
+                relevantCbs.forEach(cb => cb.checked = !allemaalAan);
+                
+                // Zorg dat de algemene "Alle klassen" checkbox mee update
+                checkAlleKlassenStatus();
             });
         });
     }
@@ -1098,3 +1157,281 @@ class AdminApp {
 document.addEventListener('DOMContentLoaded', () => {
     window.adminApp = new AdminApp();
 });
+
+// Functie om de instellingen op te halen en door te sturen naar je backend
+function slaActiviteitInstellingenOp() {
+    // Lees de statussen van de checkboxes uit (geeft true of false terug)
+    const allowSmartschool = document.getElementById('toggle_smartschool').checked;
+    const allowManual = document.getElementById('toggle_manual').checked;
+    const requireGender = document.getElementById('toggle_gender').checked;
+
+    // Maak een data-object aan voor de backend (bijv. PHP of direct naar de DB)
+    const activiteitData = {
+        // ... je andere data (zoals naam, datum, etc.)
+        allow_smartschool_login: allowSmartschool,
+        allow_manual_login: allowManual,
+        require_gender: requireGender
+    };
+
+    console.log("Te verzenden instellingen:", activiteitData);
+
+    // Voorbeeld van een fetch request naar je PHP backend
+    /*
+    fetch('api/save_activiteit.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(activiteitData)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if(data.success) {
+            alert('Instellingen succesvol opgeslagen!');
+        }
+    })
+    .catch(error => console.error('Fout bij opslaan:', error));
+    */
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Event listener voor het tonen/verbergen van de publicatiedatum
+    const toggleVisibility = document.getElementById('toggle_visibility');
+    const containerDatumOnline = document.getElementById('container_datum_online');
+
+    if (toggleVisibility && containerDatumOnline) {
+        toggleVisibility.addEventListener('change', function() {
+            if (this.checked) {
+                // Direct zichtbaar AAN = verberg planningsdatum
+                containerDatumOnline.classList.add('hidden');
+                document.getElementById('input_datum_online').value = ''; // Maak veld leeg
+            } else {
+                // Direct zichtbaar UIT = toon planningsdatum
+                containerDatumOnline.classList.remove('hidden');
+            }
+        });
+    }
+});
+
+// Voeg deze logica toe aan je bestaande opslag-functie
+function verzamelZichtbaarheidData() {
+    const isDirectZichtbaar = document.getElementById('toggle_visibility').checked;
+    const datumOnline = document.getElementById('input_datum_online').value;
+    const datumSluiting = document.getElementById('input_datum_sluiting').value;
+    const isForceClosed = document.getElementById('toggle_force_close').checked;
+
+    // Basis Front-end Validatie
+    if (!datumSluiting) {
+        alert("Een sluitingsdatum is verplicht!");
+        return false; // Stop het opslaan
+    }
+
+    if (!isDirectZichtbaar && !datumOnline) {
+        alert("Je hebt aangegeven dat de activiteit niet direct zichtbaar is. Kies dan een geplande publicatiedatum.");
+        return false; // Stop het opslaan
+    }
+
+    if (!isDirectZichtbaar && datumOnline && new Date(datumOnline) >= new Date(datumSluiting)) {
+        alert("De publicatiedatum kan niet na de sluitingsdatum vallen.");
+        return false; // Stop het opslaan
+    }
+
+    // Return the data object to merge with the rest of your form data
+    return {
+        is_direct_zichtbaar: isDirectZichtbaar,
+        datum_online: isDirectZichtbaar ? null : datumOnline, 
+        datum_sluiting: datumSluiting,
+        is_force_closed: isForceClosed
+    };
+}
+
+// Voeg deze functie toe aan je formulier-afhandeling in admin.js
+function verzamelReisPeriodeData() {
+    const startDatum = document.getElementById('input_reis_start').value;
+    const eindDatum = document.getElementById('input_reis_eind').value;
+
+    // Controleer of beide datums zijn ingevuld (omdat ze verplicht zijn)
+    if (!startDatum || !eindDatum) {
+        if (window.adminApp) {
+            window.adminApp.showAlert("Zowel de startdatum als de einddatum van de reis zijn verplicht!", "error");
+        } else {
+            alert("Zowel de startdatum als de einddatum van de reis zijn verplicht!");
+        }
+        return false;
+    }
+
+    // Controleer of de startdatum chronologisch vóór of op de einddatum ligt
+    if (new Date(startDatum) > new Date(eindDatum)) {
+        if (window.adminApp) {
+            window.adminApp.showAlert("Fout: De startdatum van de reis kan niet na de einddatum liggen.", "error");
+        } else {
+            alert("Fout: De startdatum van de reis kan niet na de einddatum liggen.");
+        }
+        return false;
+    }
+
+    // Geef de datums terug om te combineren met de rest van het addReis / updateReis object
+    return {
+        start_datum: startDatum,
+        eind_datum: eindDatum
+    };
+}
+
+function verzamelInschrijvingFaseData() {
+    const inschrijvingStart = document.getElementById('input_inschrijving_start').value;
+    const isBevroren = document.getElementById('toggle_freeze_registrations').checked;
+
+    // Controleer of de openstellingsdatum is ingevuld
+    if (!inschrijvingStart) {
+        if (window.adminApp) {
+            window.adminApp.showAlert("De startdatum voor de kamerindeling is verplicht!", "error");
+        } else {
+            alert("De startdatum voor de kamerindeling is verplicht!");
+        }
+        return false;
+    }
+
+    // Valideer met de sluitingsdatum uit stap 3
+    const datumSluiting = document.getElementById('input_datum_sluiting') ? document.getElementById('input_datum_sluiting').value : null;
+    if (datumSluiting && new Date(inschrijvingStart) >= new Date(datumSluiting)) {
+        if (window.adminApp) {
+            window.adminApp.showAlert("Fout: De startdatum van de inschrijvingen moet vóór de sluitingsdatum liggen.", "error");
+        } else {
+            alert("Fout: De startdatum van de inschrijvingen moet vóór de sluitingsdatum liggen.");
+        }
+        return false;
+    }
+
+    return {
+        inschrijving_start: inschrijvingStart,
+        is_bevroren: isBevroren
+    };
+}
+
+function initDeelscholenTabs() {
+    const tabEigen = document.getElementById('tab_btn_eigen_school');
+    const tabDeel = document.getElementById('tab_btn_deelscholen');
+    const panelEigen = document.getElementById('panel_eigen_school');
+    const panelDeel = document.getElementById('panel_deelscholen');
+
+    if (tabEigen && tabDeel) {
+        tabEigen.addEventListener('click', () => {
+            // Activeer tab
+            tabEigen.className = "flex-1 py-2.5 text-xs font-bold border-r border-slate-200 bg-white text-primary-600 border-b-2 border-b-primary-500 transition";
+            tabDeel.className = "flex-1 py-2.5 text-xs font-bold text-slate-500 hover:text-slate-800 hover:bg-slate-100/50 transition";
+            // Wissel panels
+            panelEigen.classList.remove('hidden');
+            panelEigen.classList.add('flex');
+            panelDeel.classList.add('hidden');
+            panelDeel.classList.remove('flex');
+        });
+
+        tabDeel.addEventListener('click', () => {
+            // Activeer tab
+            tabDeel.className = "flex-1 py-2.5 text-xs font-bold bg-white text-primary-600 border-b-2 border-b-primary-500 transition";
+            tabEigen.className = "flex-1 py-2.5 text-xs font-bold border-r border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-100/50 transition";
+            // Wissel panels
+            panelDeel.classList.remove('hidden');
+            panelDeel.classList.add('flex');
+            panelEigen.classList.add('hidden');
+            panelEigen.classList.remove('flex');
+            
+            // Trigger herberekening van deelscholen-klassen indien nodig
+            renderDeelscholenKlassenTree();
+        });
+    }
+}
+
+// Render-functie om klassen gestructureerd per deelschool te tonen
+async function renderDeelscholenKlassenTree() {
+    const container = document.getElementById('panel_deelscholen');
+    if (!container) return;
+
+    // Haal de geselecteerde deelscholen op uit de checkboxes
+    const geselecteerdeDeelschoolIds = Array.from(document.querySelectorAll('input[name="r_gekoppelde_deelschool"]:checked')).map(cb => cb.value);
+
+    if (geselecteerdeDeelschoolIds.length === 0) {
+        container.innerHTML = '<span class="text-amber-500 italic text-xs p-2">Vink hierboven eerst aan welke deelscholen deelnemen aan dit evenement om hun jaren en klassen te zien.</span>';
+        return;
+    }
+
+    // Voorbeeld data-fetch (Pas dit aan op basis van je database API)
+    // const data = await window.dbApi.getKlassenVanDeelscholen(geselecteerdeDeelschoolIds);
+    
+    let html = '';
+    
+    // Simulatie van de groepering per deelschool voor weergave
+    geselecteerdeDeelschoolIds.forEach(id => {
+        html += `
+            <div class="deelschool-sectie border border-slate-100 p-2 rounded bg-slate-50/50">
+                <span class="block text-xs font-bold text-slate-700 border-b border-slate-200 pb-1 mb-2 uppercase tracking-wide">Campus ID: ${id}</span>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    <label class="klas-item flex items-center gap-2 cursor-pointer p-1 hover:bg-white rounded transition" data-klas="6biw">
+                        <input type="checkbox" name="r_klas_optie" value="DEEL_${id}_6BIW" class="w-3.5 h-3.5 text-primary-600 rounded border-slate-300">
+                        <span class="text-slate-700 text-xs">6BIW</span>
+                    </label>
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initDeelscholenTabs();
+    
+    // Registreer de triggers bij veranderingen in deelscholen selectie
+    document.querySelectorAll('input[name="r_gekoppelde_deelschool"]').forEach(cb => {
+        cb.addEventListener('change', () => {
+            if(document.getElementById('panel_deelscholen').style.display !== 'none') {
+                renderDeelscholenKlassenTree();
+            }
+        });
+    });
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const radioTypes = document.querySelectorAll('input[name="r_event_type"]');
+    const containerHotelSettings = document.getElementById('container_hotel_settings');
+    const inputGroepsgrootte = document.getElementById('input_groepsgrootte');
+
+    if (radioTypes.length > 0 && containerHotelSettings) {
+        radioTypes.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                if (e.target.value === 'activiteit') {
+                    // Verberg kamer/groep instellingen
+                    containerHotelSettings.style.display = 'none';
+                } else {
+                    // Toon kamer/groep instellingen
+                    containerHotelSettings.style.display = 'block';
+                }
+            });
+        });
+    }
+});
+
+// Voeg dit toe aan je opslag-functie
+function verzamelEventTypeData() {
+    const eventType = document.querySelector('input[name="r_event_type"]:checked').value;
+    
+    // Als het een activiteit is, is de groepsgrootte altijd exact 1 (alleen jezelf)
+    // Als het een hotel is, haal dan de waarde uit het invulveld
+    const groepsgrootte = (eventType === 'activiteit') 
+        ? 1 
+        : parseInt(document.getElementById('input_groepsgrootte').value, 10);
+
+    return {
+        type: eventType, // 'hotel' of 'activiteit'
+        max_personen_per_groep: groepsgrootte
+    };
+}
+
+// Functie om de herhalingsdata te verzamelen
+function verzamelHerhalingData() {
+    const frequentie = document.getElementById('select_herhaling').value;
+
+    return {
+        herhaling_frequentie: frequentie
+    };
+}
