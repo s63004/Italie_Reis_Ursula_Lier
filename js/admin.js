@@ -320,7 +320,7 @@ class AdminApp {
                 <td class="p-3 font-medium">${r.naam}</td>
                 <td class="p-3 text-sm text-gray-500">
                     ${r.slug}<br>
-                    <button onclick="window.adminApp.copyLink('${fullLink}')" class="text-xs mt-1 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded border border-gray-300 transition shadow-sm font-medium">Kopieer Link</button>
+                    <button onclick="window.adminApp.copyLink('${fullLink.replace(/'/g, "\\'")}')" class="text-xs mt-1 bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded border border-gray-300 transition shadow-sm font-medium">Kopieer Link</button>
                 </td>
                 <td class="p-3 text-xs text-gray-600">
                     <span class="block"><b>Klassen:</b> ${klassenText}</span>
@@ -488,12 +488,12 @@ class AdminApp {
             </div>
             <div class="flex flex-col gap-2 mt-3 border-t border-slate-100 pt-3">
                 <div class="flex items-center">
-                    <input type="checkbox" id="edit_modal_groepjes" ${r.sta_groepjes_toe !== false ? 'checked' : ''} class="w-4 h-4 text-blue-600 rounded">
-                    <label class="ml-2 text-sm font-medium">Groepsinschrijvingen toestaan</label>
+                    <input type="checkbox" id="edit_modal_groepjes" ${r.sta_groepjes_toe !== false ? 'checked' : ''} class="w-4 h-4 text-blue-600 rounded cursor-pointer">
+                    <label for="edit_modal_groepjes" class="ml-2 text-sm font-medium cursor-pointer">Groepsinschrijvingen toestaan</label>
                 </div>
                 <div class="flex items-center">
-                    <input type="checkbox" id="edit_modal_actief" ${r.is_actief ? 'checked' : ''} class="w-4 h-4 text-blue-600 rounded">
-                    <label class="ml-2 text-sm font-medium">Activiteit is actief (Zichtbaar voor leerlingen)</label>
+                    <input type="checkbox" id="edit_modal_actief" ${r.is_actief ? 'checked' : ''} class="w-4 h-4 text-blue-600 rounded cursor-pointer">
+                    <label for="edit_modal_actief" class="ml-2 text-sm font-medium cursor-pointer">Activiteit is actief (Zichtbaar voor leerlingen)</label>
                 </div>
             </div>
         `;
@@ -903,7 +903,7 @@ class AdminApp {
                 <td class="p-3">${geslachtTxt}</td>
                 <td class="p-3">${statusHtml}</td>
                 <td class="p-3 text-right">
-                    <button onclick="window.adminApp.openEditLeerling(${l.id}, '${l.vnaam}', '${l.naam}', '${l.geslacht}', '${l.klas}')" class="text-blue-600 hover:underline mr-3 font-medium">Bewerk</button>
+                    <button onclick="window.adminApp.openEditLeerling(${l.id}, '${l.vnaam.replace(/'/g, "\\'")}', '${l.naam.replace(/'/g, "\\'")}', '${l.geslacht}', '${l.klas ? l.klas.replace(/'/g, "\\'") : ''}')" class="text-blue-600 hover:underline mr-3 font-medium">Bewerk</button>
                     ${!hasRes ? `<button onclick="window.adminApp.deleteLeerling('${l.id}')" class="text-red-600 hover:underline font-medium">Verwijder</button>` : '<span class="text-gray-400 text-xs italic" title="Deze persoon heeft actieve reservaties">Bezet</span>'}
                 </td>
             `;
