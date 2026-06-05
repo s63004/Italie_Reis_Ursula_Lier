@@ -11,7 +11,7 @@ class AdminApp {
 
         if (this.user && this.user.dummy) return;
 
-        this.currentTab = 'reizen'; 
+        this.currentTab = window.location.pathname.includes('nieuwereis.html') ? 'nieuwereis' : 'reizen';
         this.hotels = [];
         this.reizen = []; 
         this.editContext = null; 
@@ -414,8 +414,12 @@ class AdminApp {
         if (res.success) {
             this.showAlert("Activiteit succesvol aangemaakt.", "success");
             document.getElementById('addReisForm').reset();
-            this.setTab('reizen'); // Ga terug naar overzicht
-            await this.init(); 
+            if (window.location.pathname.includes('nieuwereis.html')) {
+                setTimeout(() => window.location.href = 'admin.html', 1500);
+            } else {
+                this.setTab('reizen'); // Ga terug naar overzicht
+                await this.init(); 
+            }
         } else {
             this.showAlert(res.message || "Fout bij aanmaken.", "error");
         }
