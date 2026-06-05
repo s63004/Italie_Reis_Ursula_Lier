@@ -342,7 +342,6 @@ class AdminApp {
         const naam = document.getElementById('r_naam').value;
         const slug = document.getElementById('r_slug').value;
         const fileInput = document.getElementById('r_foto');
-        const groepjes = document.getElementById('r_groepjes').checked;
         const file = fileInput.files[0];
         
         // NIEUW: Bepaal de String van de geselecteerde klassen
@@ -354,6 +353,29 @@ class AdminApp {
         }
         
         if (!file) return this.showAlert("Selecteer een achtergrondafbeelding.", "error");
+
+        // Verzamel alle nieuwe data via de helper-functies
+        const zichtbaarheid = window.verzamelZichtbaarheidData ? window.verzamelZichtbaarheidData.call(this) : {};
+        if (zichtbaarheid === false) return; // Validatie gefaald
+
+        const periode = window.verzamelReisPeriodeData ? window.verzamelReisPeriodeData.call(this) : {};
+        if (periode === false) return;
+
+        const inschrijfFase = window.verzamelInschrijvingFaseData ? window.verzamelInschrijvingFaseData.call(this) : {};
+        if (inschrijfFase === false) return;
+
+        const eventType = window.verzamelEventTypeData ? window.verzamelEventTypeData.call(this) : { type: 'hotel', max_personen_per_groep: 4 };
+        if (eventType === false) return;
+
+        const herhaling = window.verzamelHerhalingData ? window.verzamelHerhalingData.call(this) : { herhaling_frequentie: 'eenmalig' };
+        
+        const inlogReg = {
+            smartschool_toegestaan: document.getElementById('toggle_smartschool') ? document.getElementById('toggle_smartschool').checked : true,
+            manueel_toegestaan: document.getElementById('toggle_manual') ? document.getElementById('toggle_manual').checked : false,
+            geslacht_verplicht: document.getElementById('toggle_gender') ? document.getElementById('toggle_gender').checked : false
+        };
+
+        const groepsinschrijving = document.getElementById('r_groepjes') ? document.getElementById('r_groepjes').checked : true;
 
         let origineleTekst = "Aanmaken";
         if(submitBtn) {
@@ -370,13 +392,29 @@ class AdminApp {
             return this.showAlert("Upload mislukt: " + uploadRes.message, "error");
         }
 
-        const res = await window.dbApi.addReis(naam, slug, uploadRes.url, klassen, groepjes);
+        // Bouw het complete object
+        const reisConfig = {
+            naam,
+            slug,
+            login_bg: uploadRes.url,
+            toegestane_klassen: klassen,
+            sta_groepjes_toe: eventType.type === 'activiteit' ? false : groepsinschrijving,
+            ...zichtbaarheid,
+            ...periode,
+            ...inschrijfFase,
+            ...eventType,
+            ...herhaling,
+            ...inlogReg
+        };
+
+        const res = await window.dbApi.addReis(reisConfig);
         
         if(submitBtn) { submitBtn.disabled = false; submitBtn.innerText = origineleTekst; }
 
         if (res.success) {
             this.showAlert("Activiteit succesvol aangemaakt.", "success");
             document.getElementById('addReisForm').reset();
+            this.setTab('reizen'); // Ga terug naar overzicht
             await this.init(); 
         } else {
             this.showAlert(res.message || "Fout bij aanmaken.", "error");
